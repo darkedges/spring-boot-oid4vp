@@ -52,14 +52,15 @@ public class SecurityConfig {
 
         http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/oid4vp/**", "/login/oid4vp/**").permitAll()
+                        .requestMatchers("/", "/index.html", "/oid4vp/**", "/login/oid4vp/**").permitAll()
                         .anyRequest().authenticated())
                 .with(Oid4vpLoginConfigurer.oid4vpLogin(), configurer -> configurer
                         .relyingPartyRegistrationRepository(registrations)
                         .authorizationRequestRepository(requestRepository)
                         .presentationVerifier(sdJwtVcPresentationVerifier)
                         .issuerKeyResolver(issuerKeyResolver)
-                        .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri));
+                        .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
+                        .sameDeviceResultRedirectUri("/"));
 
         return http.build();
     }

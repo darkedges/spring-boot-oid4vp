@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -62,6 +63,9 @@ public class WalletController {
         return new JWKSet(issuerKey.toPublicJWK()).toJSONObject();
     }
 
+    // Allows the browser demo page, served by the Verifier on its own origin, to call this endpoint
+    // directly via fetch() rather than needing a server-side proxy.
+    @CrossOrigin(origins = "http://localhost:8090")
     @PostMapping(value = "/present", produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> present(@RequestBody PresentRequest body) throws Exception {
         log.info("Fetching Authorization Request from {}", body.verifierAuthorizeUrl());

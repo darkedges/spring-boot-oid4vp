@@ -28,11 +28,21 @@ public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
 
     private final RequestMatcher requestMatcher;
     private final Oid4vpTransactionResultRepository transactionResultRepository;
+    private final String successRedirectUri;
     private SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
 
     public Oid4vpTransactionResultFilter(RequestMatcher requestMatcher, Oid4vpTransactionResultRepository transactionResultRepository) {
+        this(requestMatcher, transactionResultRepository, null);
+    }
+
+    /**
+     * @param successRedirectUri if non-null, a successful handoff redirects the browser here (e.g. back to
+     *                           a demo page) instead of writing the default {@code {}} JSON body.
+     */
+    public Oid4vpTransactionResultFilter(RequestMatcher requestMatcher, Oid4vpTransactionResultRepository transactionResultRepository, String successRedirectUri) {
         this.requestMatcher = requestMatcher;
         this.transactionResultRepository = transactionResultRepository;
+        this.successRedirectUri = successRedirectUri;
     }
 
     public void setSecurityContextRepository(SecurityContextRepository securityContextRepository) {
@@ -65,6 +75,11 @@ public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
         context.setAuthentication(authentication.get());
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, request, response);
+
+        if (successRedirectUri != null) {
+            response.sendRedirect(successRedirectUri);
+            return;
+        }
 
         response.setStatus(HttpServletResponse.SC_OK);
         response.setContentType("application/json");

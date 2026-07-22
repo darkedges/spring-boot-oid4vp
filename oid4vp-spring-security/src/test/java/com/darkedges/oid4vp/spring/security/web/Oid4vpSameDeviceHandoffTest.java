@@ -24,6 +24,7 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
@@ -195,5 +196,26 @@ class Oid4vpSameDeviceHandoffTest {
         responseFilter.doFilter(walletPost, walletPostResponse, new MockFilterChain());
 
         assertThat(walletPostResponse.getContentAsString()).isEqualTo("{}");
+    }
+
+    @Test
+    void resultFilterRedirectsToConfiguredUriInsteadOfBareAckWhenConfigured() throws Exception {
+        InMemoryOid4vpTransactionResultRepository transactionResultRepository = new InMemoryOid4vpTransactionResultRepository();
+        String transactionId = "handoff-txn-redirect";
+        String responseCode = "code-1";
+        transactionResultRepository.save(transactionId, responseCode,
+                new TestingAuthenticationToken("user", "credentials"));
+
+        Oid4vpTransactionResultFilter resultFilter =
+                new Oid4vpTransactionResultFilter(RESULT_MATCHER, transactionResultRepository, "/");
+        MockHttpServletRequest browserGet = new MockHttpServletRequest("GET", "/oid4vp/result/" + transactionId);
+        browserGet.setParameter("response_code", responseCode);
+        MockHttpServletResponse browserGetResponse = new MockHttpServletResponse();
+
+        resultFilter.doFilter(browserGet, browserGetResponse, new MockFilterChain());
+
+        assertThat(browserGetResponse.getStatus()).isEqualTo(302);
+        assertThat(browserGetResponse.getRedirectedUrl()).isEqualTo("/");
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isInstanceOf(TestingAuthenticationToken.class);
     }
 }

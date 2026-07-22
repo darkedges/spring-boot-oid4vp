@@ -60,6 +60,7 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private String sameDeviceResultBaseUri;
     private RequestMatcher transactionResultRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpTransactionResultFilter.DEFAULT_RESULT_URI_PATTERN);
+    private String sameDeviceResultRedirectUri;
 
     public Oid4vpLoginConfigurer<H> relyingPartyRegistrationRepository(Oid4vpRelyingPartyRegistrationRepository repository) {
         this.relyingPartyRegistrationRepository = repository;
@@ -170,6 +171,17 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         return this;
     }
 
+    /**
+     * Once the same-device handoff completes and the {@code SecurityContext} is established, redirect the
+     * End-User's browser here instead of writing the default {@code {}} JSON body — e.g. back to a demo
+     * page so it can re-check {@code /profile} and show a signed-in state. Relative URIs are resolved
+     * against the Verifier's own origin.
+     */
+    public Oid4vpLoginConfigurer<H> sameDeviceResultRedirectUri(String redirectUri) {
+        this.sameDeviceResultRedirectUri = redirectUri;
+        return this;
+    }
+
     @Override
     public void init(H http) {
         if (issuerKeyResolver == null) {
@@ -218,7 +230,7 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
         if (transactionResultRepository != null) {
             Oid4vpTransactionResultFilter transactionResultFilter =
-                    new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository);
+                    new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository, sameDeviceResultRedirectUri);
             http.addFilterBefore(transactionResultFilter, UsernamePasswordAuthenticationFilter.class);
         }
     }

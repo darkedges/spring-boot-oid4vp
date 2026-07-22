@@ -49,6 +49,22 @@ real Wallet app required, everything is drivable with `curl`.
 | `oid4vp-demo-wallet` | `8081` | Self-issues one SD-JWT VC credential at startup and can present it to a Verifier on request |
 | `oid4vp-demo-verifier` | `8090` | Requests a presentation, verifies it, and gates `/profile` behind a valid one |
 
+### In a browser
+
+`oid4vp-demo-verifier` serves a small static page at `http://localhost:8090/` — "Acme Corp Employee
+Verification" — with a **Sign in with Wallet** button. It tells the same story `demo.sh` does, but as an
+End-User would experience it: click the button, the page calls the demo Wallet's `/present` endpoint
+cross-origin (CORS is opened up on the Wallet for `http://localhost:8090` — see `@CrossOrigin` on
+`WalletController.present`), the Wallet builds and submits the presentation, and the browser is redirected
+back to `/` — now signed in, showing "Welcome, Jane Demo".
+
+This relies on the library's same-device `response_code`/`redirect_uri` handoff
+(`Oid4vpTransactionResultFilter`) redirecting to `/` on success rather than returning its default bare
+`{}` JSON ack — configured via `.sameDeviceResultRedirectUri("/")` in `SecurityConfig`.
+
+Start both apps (`docker compose up --build`, or bare-metal per below) and open
+[http://localhost:8090](http://localhost:8090).
+
 ### Quickest path: `demo.sh`
 
 ```bash
