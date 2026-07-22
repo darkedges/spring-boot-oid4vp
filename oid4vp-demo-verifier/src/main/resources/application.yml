@@ -1,0 +1,20 @@
+server:
+  port: 8090
+
+demo:
+  wallet-base-url: http://localhost:8081
+
+oid4vp:
+  verifier:
+    relying-party:
+      demo:
+        client-id: "redirect_uri:http://localhost:8090/login/oid4vp/direct-post/demo"
+        response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
+        dcql-query: >
+          {"credentials":[{"id":"employee","format":"dc+sd-jwt",
+          "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
+          "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
+
+logging:
+  level:
+    com.darkedges.oid4vp: INFO

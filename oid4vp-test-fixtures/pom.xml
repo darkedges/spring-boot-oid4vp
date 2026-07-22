@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vp</groupId>
+    <artifactId>oid4vp-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vp-test-fixtures</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VP Test Fixtures</name>
+  <description>Test-scope-only fixtures sourced directly from docs/1.1/examples (single source of truth,
+    copied onto the classpath at build time via an additional resource directory) plus small loader
+    helpers.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.yaml</groupId>
+      <artifactId>snakeyaml</artifactId>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!-- Sourced directly from docs/1.1/examples so fixtures never drift from the spec's own examples. -->
+      <resource>
+        <directory>${project.basedir}/../docs/1.1/examples</directory>
+        <targetPath>examples</targetPath>
+      </resource>
+      <!-- The Claims Path Pointer "Arthur Dent" example is inline spec prose, not a docs/ fixture file;
+           kept as a small transcribed resource in this module instead. -->
+      <resource>
+        <directory>src/main/resources-spec-transcribed</directory>
+      </resource>
+    </resources>
+  </build>
+</project>

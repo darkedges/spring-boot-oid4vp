@@ -1,0 +1,16 @@
+# Activated via SPRING_PROFILES_ACTIVE=docker (see docker-compose.yml).
+#
+# Backend-to-backend URLs (the Wallet container POSTing to response-uri, or fetching issuer-jwks) must
+# use docker-compose service names, since "localhost" inside a container refers to that container itself.
+# demo.same-device-result-base-uri is deliberately NOT overridden here: it's followed by the End-User's
+# browser (or, in this demo, curl running on the host), which reaches the Verifier via its published port
+# on localhost — same as the non-docker case.
+demo:
+  wallet-base-url: http://wallet:8081
+
+oid4vp:
+  verifier:
+    relying-party:
+      demo:
+        client-id: "redirect_uri:http://verifier:8090/login/oid4vp/direct-post/demo"
+        response-uri: "http://verifier:8090/login/oid4vp/direct-post/demo"

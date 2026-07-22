@@ -1,0 +1,20 @@
+# Requires the jars to be built first: `mvn install -DskipTests` from the repo root.
+# Then: `docker compose up --build` (or just run demo.sh, which does this for you).
+services:
+  wallet:
+    build:
+      context: ./oid4vp-demo-wallet
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  verifier:
+    build:
+      context: ./oid4vp-demo-verifier
+    ports:
+      - "8090:8090"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    depends_on:
+      - wallet

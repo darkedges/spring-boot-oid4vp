@@ -1,0 +1,26 @@
+{
+  "_comment": "Transcribed verbatim from OpenID4VP 1.1, 'IETF SD-JWT VC' > 'Example Credential' (the disclosures belonging to examples/credentials/sd_jwt_vc.json).",
+  "disclosures": [
+    {
+      "claimName": "given_name",
+      "sha256HashBase64Url": "jsu9yVulwQQlhFlM_3JlzMaSFzglhQG0DpfayQwLUK4",
+      "disclosureBase64Url": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImdpdmVuX25hbWUiLCAiSm9obiJd",
+      "salt": "2GLC42sKQveCfGfryNRN9w",
+      "value": "John"
+    },
+    {
+      "claimName": "family_name",
+      "sha256HashBase64Url": "TGf4oLbgwd5JQaHyKVQZU9UdGE0w5rtDsrZzfUaomLo",
+      "disclosureBase64Url": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImZhbWlseV9uYW1lIiwgIkRvZSJd",
+      "salt": "eluV5Og3gSNII8EYnsxA_A",
+      "value": "Doe"
+    },
+    {
+      "claimName": "birthdate",
+      "sha256HashBase64Url": "tiTngp9_jhC389UP8_k67MXqoSfiHq3iK6o9un4we_Y",
+      "disclosureBase64Url": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgImJpcnRoZGF0ZSIsICIxOTQwLTAxLTAxIl0",
+      "salt": "6Ij7tM-a5iVPGboS5tmvVA",
+      "value": "1940-01-01"
+    }
+  ]
+}

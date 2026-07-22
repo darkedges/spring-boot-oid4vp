@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vp</groupId>
+    <artifactId>oid4vp-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vp-verifier-core</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VP Verifier Core</name>
+  <description>Non-Spring Verifier orchestration: validates a full Authorization Response's vp_token
+    against the DCQL query it is answering, dispatching each presentation to the registered
+    format-specific PresentationVerifier, and decrypting encrypted (direct_post.jwt / dc_api.jwt)
+    responses. Depends on Nimbus JOSE+JWT for the (format-agnostic) response-encryption envelope only.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-sdjwt-vc</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>

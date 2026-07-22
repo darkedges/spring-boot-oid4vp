@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.darkedges.oid4vp</groupId>
+    <artifactId>oid4vp-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>oid4vp-wallet-core</artifactId>
+  <packaging>jar</packaging>
+
+  <name>OpenID4VP Wallet Core</name>
+  <description>Non-Spring Wallet orchestration: evaluates a DCQL query against a CredentialStore via
+    DcqlEvaluator, then builds the vp_token by dispatching each selected credential to the registered
+    format-specific PresentationBuilder. Depends on oid4vp-format-sdjwt-vc for the dc+sd-jwt builder.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-sdjwt-vc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.nimbusds</groupId>
+      <artifactId>nimbus-jose-jwt</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-test-fixtures</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Test-scope only, for full Wallet-build-then-Verifier-verify round-trip tests. A real deployment
+         only needs one side; depending on the Verifier orchestration here is purely to prove the two
+         halves of this project actually interoperate. -->
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-verifier-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+</project>
