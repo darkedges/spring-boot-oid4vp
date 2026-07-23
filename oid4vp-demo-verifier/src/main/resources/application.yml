@@ -19,6 +19,11 @@ demo:
   # docker (see application-docker.yml): the compose service name, since "localhost" inside the Wallet's
   # container is itself, not us.
   verifier-base-url-for-wallet: http://localhost:8090
+  # Base for the signed request_uri handed to an invoked Wallet (see .walletInvocation(...) in
+  # SecurityConfig) — fetched externally (a real Wallet, or a conformance test suite), never by our own
+  # containers, so not overridden in application-docker.yml (same reasoning as
+  # demo.same-device-result-base-uri).
+  request-uri-base: http://localhost:8090/oid4vp/request
 
 oid4vp:
   verifier:
@@ -29,6 +34,11 @@ oid4vp:
         # use the redirect_uri Client Identifier Prefix". Must be a SAN on demo-verifier-signing-key.p12.
         client-id: "x509_san_dns:localhost"
         response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
+        # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
+        # GET /oid4vp/invoke/demo — see README: "Signed Authorization Requests". Unset by default (no
+        # wallet invocation possible); the CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in
+        # docker-compose.yml sets this.
+        wallet-authorization-endpoint: ""
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},

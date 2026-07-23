@@ -84,13 +84,17 @@ public class Oid4vpVerifierAutoConfiguration {
     private static Oid4vpRelyingPartyRegistration toRegistration(String registrationId, Oid4vpProperties.RelyingParty relyingParty) {
         ClientIdentifierPrefix clientId = ClientIdentifierPrefixParser.parse(relyingParty.getClientId());
         DcqlQuery dcqlQuery = readDcqlQuery(relyingParty.getDcqlQuery());
+        Optional<URI> walletAuthorizationEndpoint = Optional.ofNullable(relyingParty.getWalletAuthorizationEndpoint())
+                .filter(value -> !value.isBlank())
+                .map(URI::create);
         return new Oid4vpRelyingPartyRegistration(
                 registrationId,
                 clientId,
                 URI.create(relyingParty.getResponseUri()),
                 ResponseMode.DIRECT_POST,
                 () -> dcqlQuery,
-                Optional.empty());
+                Optional.empty(),
+                walletAuthorizationEndpoint);
     }
 
     private static DcqlQuery readDcqlQuery(String json) {

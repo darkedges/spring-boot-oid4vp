@@ -26,6 +26,10 @@ import java.util.Optional;
  *
  * <p>The response {@code Content-Type} is always {@code application/oauth-authz-req+jwt}, regardless of
  * the request's {@code Accept} header.
+ *
+ * <p>Error paths use {@code response.setStatus(...)} rather than {@code sendError(...)}: the latter
+ * triggers a servlet-container forward to {@code /error}, re-entering the Spring Security filter chain —
+ * which 403s unless the application happens to have permitAll'd {@code /error} too.
  */
 public class Oid4vpRequestObjectFilter extends OncePerRequestFilter {
 
@@ -60,7 +64,7 @@ public class Oid4vpRequestObjectFilter extends OncePerRequestFilter {
 
         String registrationId = result.getVariables().get("registrationId");
         if (registrationId == null) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
 
@@ -68,13 +72,13 @@ public class Oid4vpRequestObjectFilter extends OncePerRequestFilter {
         try {
             authorizationRequest = requestService.resolve(registrationId).request();
         } catch (IllegalArgumentException notFound) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
 
         Optional<JsonNode> signingKey = signingKeyResolver.resolveSigningKey(registrationId);
         if (signingKey.isEmpty()) {
-            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "no request object signing key configured");
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             return;
         }
 

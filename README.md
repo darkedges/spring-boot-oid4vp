@@ -236,6 +236,25 @@ that.
 If you regenerate the cert for different hostnames, keep the `client-id` values in `application.yml` /
 `application-docker.yml` / `application-cloudflare.yml` in sync with its SANs.
 
+### Invoking a Wallet (`GET /oid4vp/invoke/{registrationId}`)
+
+Opening `/oid4vp/invoke/demo` in a browser redirects to a Wallet's `authorization_endpoint` with
+`client_id`/`request_uri` attached — "in the same way a web-based wallet would be invoked", which is
+exactly how the OpenID Foundation conformance suite documents inviting its own Verifier test plans. This
+is the missing piece for actually driving a conformance test run: create a Verifier test plan in the suite
+(DCQL, `dc+sd-jwt`, `direct_post`, `x509_san_dns` — matching what's built here), start it, copy the
+`authorization_endpoint` URL from its "Exported Values" once it's `WAITING`, and set:
+
+```bash
+CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker compose up -d verifier
+```
+
+then open `http://localhost:8090/oid4vp/invoke/demo`. Unset (the default), that endpoint returns `501` —
+there's deliberately no way to pass a redirect target as a request parameter instead, since that would be
+an open redirect. Each relying-party registration configures its own fixed
+`wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
+here lets a caller redirect anywhere they choose.
+
 ## Notes
 
 - The Wallet self-issuing its own credential (`DemoCredentialConfig`) is a demo-only shortcut —

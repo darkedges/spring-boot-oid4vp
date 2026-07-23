@@ -8,6 +8,7 @@ demo:
   wallet-base-url-for-browser: https://wallet.zkp.au
   same-device-result-base-uri: https://verify.irving.au/oid4vp/result
   verifier-base-url-for-wallet: https://verify.irving.au
+  request-uri-base: https://verify.irving.au/oid4vp/request
 
 oid4vp:
   verifier:

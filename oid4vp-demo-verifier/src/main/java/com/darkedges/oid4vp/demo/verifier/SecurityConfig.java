@@ -50,7 +50,8 @@ public class SecurityConfig {
             @Qualifier("sdJwtVcPresentationVerifier") PresentationVerifier sdJwtVcPresentationVerifier,
             IssuerKeyResolver issuerKeyResolver,
             RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
-            @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri)
+            @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri,
+            @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase)
             throws Exception {
 
         http.csrf(csrf -> csrf.disable())
@@ -65,7 +66,8 @@ public class SecurityConfig {
                         .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)
                         .requestObjectSigningAlgorithm(JWSAlgorithm.ES256)
                         .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
-                        .sameDeviceResultRedirectUri("/"));
+                        .sameDeviceResultRedirectUri("/")
+                        .walletInvocation(requestUriBase));
 
         return http.build();
     }

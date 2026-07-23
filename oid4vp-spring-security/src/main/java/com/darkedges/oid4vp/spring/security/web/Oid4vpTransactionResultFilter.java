@@ -21,6 +21,10 @@ import java.util.Optional;
  * steps 7–9, collapsed into one hop — see {@link Oid4vpSameDeviceAuthenticationSuccessHandler}). Looks up
  * the Authorization Response by {@code transactionId} + {@code response_code}, and if found, establishes
  * the {@code SecurityContext} for this browser session.
+ *
+ * <p>Error paths use {@code response.setStatus(...)} rather than {@code sendError(...)}: the latter
+ * triggers a servlet-container forward to {@code /error}, re-entering the Spring Security filter chain —
+ * which 403s unless the application happens to have permitAll'd {@code /error} too.
  */
 public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
 
@@ -61,13 +65,13 @@ public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
         String transactionId = result.getVariables().get("transactionId");
         String responseCode = request.getParameter("response_code");
         if (transactionId == null || responseCode == null) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "missing transactionId or response_code");
+            response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             return;
         }
 
         Optional<Authentication> authentication = transactionResultRepository.consume(transactionId, responseCode);
         if (authentication.isEmpty()) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, "unknown or already-consumed transaction");
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
         }
 

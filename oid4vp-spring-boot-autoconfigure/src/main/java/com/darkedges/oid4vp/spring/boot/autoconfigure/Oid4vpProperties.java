@@ -65,6 +65,10 @@ public class Oid4vpProperties {
         /** OPTIONAL {@code client_metadata} value, as JSON text. */
         private String clientMetadata;
 
+        /** OPTIONAL fixed Wallet {@code authorization_endpoint} to redirect the End-User's browser to —
+         * see {@code Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint}. */
+        private String walletAuthorizationEndpoint;
+
         public String getClientId() {
             return clientId;
         }
@@ -95,6 +99,14 @@ public class Oid4vpProperties {
 
         public void setClientMetadata(String clientMetadata) {
             this.clientMetadata = clientMetadata;
+        }
+
+        public String getWalletAuthorizationEndpoint() {
+            return walletAuthorizationEndpoint;
+        }
+
+        public void setWalletAuthorizationEndpoint(String walletAuthorizationEndpoint) {
+            this.walletAuthorizationEndpoint = walletAuthorizationEndpoint;
         }
     }
 }

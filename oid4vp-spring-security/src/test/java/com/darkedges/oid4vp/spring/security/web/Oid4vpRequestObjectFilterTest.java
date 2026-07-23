@@ -51,6 +51,7 @@ class Oid4vpRequestObjectFilterTest {
                 URI.create("https://verifier.example.org/oid4vp/response"),
                 ResponseMode.DIRECT_POST,
                 () -> dcqlQuery,
+                Optional.empty(),
                 Optional.empty());
         return new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration),

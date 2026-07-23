@@ -17,6 +17,7 @@ import com.darkedges.oid4vp.spring.security.web.Oid4vpRequestObjectFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpSameDeviceAuthenticationSuccessHandler;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepository;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpWalletInvocationFilter;
 import com.darkedges.oid4vp.verifier.AuthorizationResponseValidator;
 import com.nimbusds.jose.JWSAlgorithm;
 import org.springframework.http.HttpMethod;
@@ -61,6 +62,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private RequestMatcher transactionResultRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpTransactionResultFilter.DEFAULT_RESULT_URI_PATTERN);
     private String sameDeviceResultRedirectUri;
+    private String walletInvocationRequestUriBase;
+    private RequestMatcher walletInvocationRequestMatcher =
+            PathPatternRequestMatcher.pathPattern(Oid4vpWalletInvocationFilter.DEFAULT_INVOKE_URI_PATTERN);
 
     public Oid4vpLoginConfigurer<H> relyingPartyRegistrationRepository(Oid4vpRelyingPartyRegistrationRepository repository) {
         this.relyingPartyRegistrationRepository = repository;
@@ -182,6 +186,31 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         return this;
     }
 
+    /**
+     * Enables {@code GET /oid4vp/invoke/{registrationId}} ({@link Oid4vpWalletInvocationFilter}):
+     * redirects the End-User's browser to a Wallet's {@code authorization_endpoint} (configured per
+     * relying-party registration, not accepted as a request parameter — see
+     * {@code Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint}) with {@code client_id} and
+     * {@code request_uri} attached. Requires {@link #relyingPartyRegistrationRepository} and
+     * {@link #requestObjectSigningKeyResolver} to also be configured — an unsigned request has nothing a
+     * real Wallet would trust.
+     *
+     * @param requestUriBase e.g. {@code "https://verifier.example.org/oid4vp/request"} — must match
+     *                       wherever {@link Oid4vpRequestObjectFilter} is actually hosted (see
+     *                       {@link #requestUriPattern}).
+     */
+    public Oid4vpLoginConfigurer<H> walletInvocation(String requestUriBase) {
+        this.walletInvocationRequestUriBase = requestUriBase;
+        return this;
+    }
+
+    /** Overrides the default {@code /oid4vp/invoke/{registrationId}} path pattern used by
+     * {@link #walletInvocation}. */
+    public Oid4vpLoginConfigurer<H> walletInvocationUriPattern(String pathPattern) {
+        this.walletInvocationRequestMatcher = PathPatternRequestMatcher.pathPattern(pathPattern);
+        return this;
+    }
+
     @Override
     public void init(H http) {
         if (issuerKeyResolver == null) {
@@ -189,6 +218,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         }
         if (presentationVerifiers.isEmpty()) {
             throw new IllegalStateException("at least one presentationVerifier must be configured via .presentationVerifier(...)");
+        }
+        if (walletInvocationRequestUriBase != null && relyingPartyRegistrationRepository == null) {
+            throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .walletInvocation(...)");
         }
     }
 
@@ -232,6 +264,12 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
             Oid4vpTransactionResultFilter transactionResultFilter =
                     new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository, sameDeviceResultRedirectUri);
             http.addFilterBefore(transactionResultFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
+        if (walletInvocationRequestUriBase != null) {
+            Oid4vpWalletInvocationFilter walletInvocationFilter = new Oid4vpWalletInvocationFilter(
+                    walletInvocationRequestMatcher, relyingPartyRegistrationRepository, walletInvocationRequestUriBase);
+            http.addFilterBefore(walletInvocationFilter, UsernamePasswordAuthenticationFilter.class);
         }
     }
 
