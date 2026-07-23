@@ -199,9 +199,19 @@ separate domains, not just two containers on one private network, so nothing rou
 `localhost`/service-name shortcut that only exists locally. If you're using different domains, edit both
 `application-cloudflare.yml` files (and `docker-compose.cloudflare.yml`'s comment) to match.
 
-You still need to actually get traffic to the containers — this repo doesn't include a Cloudflare Tunnel
-config. Typically that means running `cloudflared` (as a sidecar container or on the host) with two
-ingress rules, one per hostname, pointing at `localhost:8081` (Wallet) and `localhost:8090` (Verifier).
+You still need to actually get traffic to the containers. `docker-compose.tunnel.yml` layers on a
+`cloudflared` connector for this — see its header comment for the one-time dashboard setup (create a
+tunnel, add the two Public Hostname routes, copy the token):
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN="<token from the dashboard>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+```
+
+One tunnel/token covers both `verify.irving.au` and `wallet.zkp.au` as long as both domains are on the
+same Cloudflare account — the tunnel's Public Hostname routes point at the compose service names
+(`verifier:8090`, `wallet:8081`), reached over the compose network like any other container-to-container
+call in this stack, not `localhost`.
 
 Two properties matter here that are easy to conflate: `demo.wallet-base-url` is fetched **server-side** by
 the Verifier (`IssuerKeyResolver` hitting `/issuer-jwks`), while `demo.wallet-base-url-for-browser` is
@@ -246,10 +256,18 @@ is the missing piece for actually driving a conformance test run: create a Verif
 `authorization_endpoint` URL from its "Exported Values" once it's `WAITING`, and set:
 
 ```bash
-CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker compose up -d verifier
+CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" DEMO_EMPLOYER_NAME=ZKP docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
 ```
 
-then open `http://localhost:8090/oid4vp/invoke/demo`. Unset (the default), that endpoint returns `501` —
+**Must be the `cloudflare` profile (plus the tunnel), not plain `docker`** — the conformance suite runs on
+its own remote server and fetches `request_uri` itself, so that URL has to be something *its* server can
+reach. Under plain `docker`, `demo.request-uri-base` resolves to `http://localhost:8090`, which is only
+ever reachable from your own machine; the suite gets a plain connection-refused trying to fetch it. Under
+`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real.
+
+Then open `https://verify.irving.au/oid4vp/invoke/demo` (not `localhost` — same reasoning) in a browser.
+Unset, `CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT` defaults to empty and that endpoint returns `501` —
 there's deliberately no way to pass a redirect target as a request parameter instead, since that would be
 an open redirect. Each relying-party registration configures its own fixed
 `wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
