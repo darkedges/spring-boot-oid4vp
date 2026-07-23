@@ -51,7 +51,7 @@ real Wallet app required, everything is drivable with `curl`.
 
 ### In a browser
 
-`oid4vp-demo-verifier` serves a small static page at `http://localhost:8090/` — "Acme Corp Employee
+`oid4vp-demo-verifier` serves a small static page at `http://localhost:8090/` — "ZKP Employee
 Verification" — with a **Sign in with Wallet** button. It tells the same story `demo.sh` does, but as an
 End-User would experience it: click the button, the page calls the demo Wallet's `/present` endpoint
 cross-origin (CORS is opened up on the Wallet for `http://localhost:8090` — see `@CrossOrigin` on
