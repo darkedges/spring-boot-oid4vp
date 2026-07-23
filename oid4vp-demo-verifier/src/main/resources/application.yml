@@ -2,6 +2,9 @@ server:
   port: 8090
 
 demo:
+  # Shown on the browser demo page ("<employer-name> Employee Verification" etc.) — override via the
+  # DEMO_EMPLOYER_NAME environment variable (Spring Boot relaxed-binds env vars to properties).
+  employer-name: ZKP
   # Fetched server-side (IssuerKeyResolver hitting /issuer-jwks) — under docker (application-docker.yml)
   # this becomes the compose service name, since it's called Verifier-container -> Wallet-container.
   wallet-base-url: http://localhost:8081

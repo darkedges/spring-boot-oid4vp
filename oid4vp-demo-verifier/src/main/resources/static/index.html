@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZKP — Employee Verification</title>
+<title>Employee Verification</title>
 <style>
   :root { color-scheme: light dark; }
   body {
@@ -60,7 +60,7 @@
 
 <header>
   <div class="logo">🏢</div>
-  <h1>ZKP Employee Verification</h1>
+  <h1 id="employer-heading">Employee Verification</h1>
   <p>Prove you work here — no password, no HR lookup, just your Wallet.</p>
 </header>
 
@@ -79,7 +79,7 @@
   <div id="signed-in" class="hidden">
     <div class="avatar">✅</div>
     <p>Welcome, <strong id="employee-name"></strong>.</p>
-    <p class="status info">Verified as a ZKP employee via your digital Wallet credential.</p>
+    <p class="status info" id="verified-line">Verified as an employee via your digital Wallet credential.</p>
   </div>
 
 </div>
@@ -108,6 +108,11 @@
   async function loadDemoConfig() {
     const res = await fetch("/demo-config");
     demoConfig = await res.json();
+
+    document.title = demoConfig.employerName + " — Employee Verification";
+    document.getElementById("employer-heading").textContent = demoConfig.employerName + " Employee Verification";
+    document.getElementById("verified-line").textContent =
+      "Verified as a " + demoConfig.employerName + " employee via your digital Wallet credential.";
     document.getElementById("footer").textContent =
       "Demo Wallet: " + demoConfig.walletBaseUrl + " · Demo Verifier: " + window.location.origin;
   }

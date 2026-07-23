@@ -58,6 +58,11 @@ cross-origin (CORS is opened up on the Wallet for `http://localhost:8090` — se
 `WalletController.present`), the Wallet builds and submits the presentation, and the browser is redirected
 back to `/` — now signed in, showing "Welcome, Jane Demo".
 
+The "ZKP" name in the page's copy comes from `demo.employer-name` (`DemoConfigController`, exposed via
+`GET /demo-config`) — override it with the `DEMO_EMPLOYER_NAME` environment variable (Spring Boot
+relaxed-binds env vars to properties) to rebrand without touching HTML. Already wired into
+`docker-compose.yml` with a default of `ZKP`; set it in your shell or a `.env` file before `docker compose up`.
+
 This relies on the library's same-device `response_code`/`redirect_uri` handoff
 (`Oid4vpTransactionResultFilter`) redirecting to `/` on success rather than returning its default bare
 `{}` JSON ack — configured via `.sameDeviceResultRedirectUri("/")` in `SecurityConfig`.
