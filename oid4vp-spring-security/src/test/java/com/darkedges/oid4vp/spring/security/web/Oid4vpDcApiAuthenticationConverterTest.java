@@ -129,7 +129,7 @@ class Oid4vpDcApiAuthenticationConverterTest {
                 .contains("origin:" + ORIGIN);
 
         JsonNode issuerJwk = MAPPER.readTree(issuerKey.toPublicJWK().toJSONString());
-        IssuerKeyResolver issuerKeyResolver = (issuer, keyId) -> Optional.of(issuerJwk);
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerJwk);
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         Oid4vpAuthorizationResponseAuthenticationProvider provider =
@@ -184,7 +184,7 @@ class Oid4vpDcApiAuthenticationConverterTest {
         Authentication unauthenticated = converter.convert(request);
 
         JsonNode issuerJwk = MAPPER.readTree(issuerKey.toPublicJWK().toJSONString());
-        IssuerKeyResolver issuerKeyResolver = (issuer, keyId) -> Optional.of(issuerJwk);
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerJwk);
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         Oid4vpAuthorizationResponseAuthenticationProvider provider =

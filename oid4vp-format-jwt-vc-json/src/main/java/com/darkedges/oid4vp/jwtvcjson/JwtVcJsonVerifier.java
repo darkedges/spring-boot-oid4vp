@@ -14,6 +14,7 @@ import com.nimbusds.jwt.SignedJWT;
 
 import java.text.ParseException;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -89,7 +90,10 @@ public final class JwtVcJsonVerifier implements PresentationVerifier {
             throw new JwtVcJsonVerificationException(what + " is missing required \"iss\" claim");
         }
         Optional<String> keyId = Optional.ofNullable(jwt.getHeader().getKeyID());
-        JsonNode jwkNode = params.issuerKeyResolver().resolve(issuer, keyId)
+        List<String> certificateChain = jwt.getHeader().getX509CertChain() == null
+                ? List.of()
+                : jwt.getHeader().getX509CertChain().stream().map(Object::toString).toList();
+        JsonNode jwkNode = params.issuerKeyResolver().resolve(issuer, keyId, certificateChain)
                 .orElseThrow(() -> new JwtVcJsonVerificationException("no signing key found for " + what + " issuer \"" + issuer + "\""));
 
         try {

@@ -313,6 +313,11 @@ here lets a caller redirect anywhere they choose.
 - The Wallet self-issuing its own credential (`DemoCredentialConfig`) is a demo-only shortcut —
   credential *issuance* is a separate protocol (OpenID for Verifiable Credential Issuance) outside this
   project's scope. A real Wallet receives credentials from a real Issuer.
-- `IssuerKeyResolver` fetching the issuer's key straight from the Wallet's own `/issuer-jwks` endpoint is
-  also a demo-only simplification (there's no real trust relationship being checked). A real Verifier
-  resolves issuer trust through whatever framework it's deployed under.
+- `IssuerKeyResolver` resolves the issuer's key two ways, both demo-only simplifications with no real trust
+  relationship being checked: first from the credential's own embedded `x5c` certificate chain (trusting
+  a self-signed leaf certificate outright, no CA/chain validation — this is what lets the demo Verifier
+  accept credentials from external Wallets/issuers, such as those used by the OpenID Foundation
+  conformance suite), falling back to fetching the issuer's key straight from the Wallet's own
+  `/issuer-jwks` endpoint for credentials that carry no `x5c` (only the demo Wallet's own self-issued
+  credential, via `DemoCredentialConfig`). A real Verifier resolves issuer trust through whatever
+  framework it's deployed under.

@@ -91,7 +91,7 @@ class SdJwtVcPresentationBuilderTest {
                         List.of("https://credentials.example.com/example_credential")))
                 .build();
         var params = new com.darkedges.oid4vp.core.response.PresentationVerificationParams(
-                query, nonce, aud, (issuer, keyId) -> Optional.of(issuerJwk),
+                query, nonce, aud, (issuer, keyId, certificateChain) -> Optional.of(issuerJwk),
                 java.time.Clock.fixed(iat, java.time.ZoneOffset.UTC));
 
         var result = new SdJwtVerifier().verify(

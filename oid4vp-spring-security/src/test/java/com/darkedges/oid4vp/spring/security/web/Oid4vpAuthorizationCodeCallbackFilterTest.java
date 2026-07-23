@@ -83,7 +83,7 @@ class Oid4vpAuthorizationCodeCallbackFilterTest {
                 new Base64URL(issuerKeyYaml.get("y").toString()))
                 .build();
         JsonNode jwk = MAPPER.readTree(issuerKey.toJSONString());
-        return (issuer, keyId) -> Optional.of(jwk);
+        return (issuer, keyId, certificateChain) -> Optional.of(jwk);
     }
 
     private static Clock fixedClock() {

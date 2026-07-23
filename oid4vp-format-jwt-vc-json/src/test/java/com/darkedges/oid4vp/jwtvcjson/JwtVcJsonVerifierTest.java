@@ -92,7 +92,7 @@ class JwtVcJsonVerifierTest {
     private static IssuerKeyResolver resolverFor(ECKey issuerKey, ECKey holderKey) throws Exception {
         JsonNode issuerJwk = MAPPER.readTree(issuerKey.toPublicJWK().toJSONString());
         JsonNode holderJwk = MAPPER.readTree(holderKey.toPublicJWK().toJSONString());
-        return (issuer, keyId) -> switch (issuer) {
+        return (issuer, keyId, certificateChain) -> switch (issuer) {
             case ISSUER -> Optional.of(issuerJwk);
             case HOLDER -> Optional.of(holderJwk);
             default -> Optional.empty();
@@ -175,7 +175,7 @@ class JwtVcJsonVerifierTest {
         // what's on file for that issuer.
         JsonNode wrongJwk = MAPPER.readTree(wrongIssuerKey.toPublicJWK().toJSONString());
         JsonNode holderJwk = MAPPER.readTree(holderKey.toPublicJWK().toJSONString());
-        IssuerKeyResolver resolver = (issuer, keyId) -> switch (issuer) {
+        IssuerKeyResolver resolver = (issuer, keyId, certificateChain) -> switch (issuer) {
             case ISSUER -> Optional.of(wrongJwk);
             case HOLDER -> Optional.of(holderJwk);
             default -> Optional.empty();

@@ -13,6 +13,8 @@ import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepositor
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.Curve;
+import com.nimbusds.jose.jwk.ECKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -24,16 +26,24 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayInputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.security.interfaces.ECPublicKey;
+import java.util.Base64;
+import java.util.List;
 import java.util.Optional;
 
 /**
  * Wires {@link Oid4vpLoginConfigurer} into the security filter chain: {@code /oid4vp/**} (the authorize
  * and same-device result endpoints) and {@code /login/oid4vp/**} (the direct_post/dc_api response
  * endpoints, per the library's default path patterns) are open to the Wallet; everything else requires a
- * validated presentation. The issuer key is resolved by fetching the demo Wallet's own
- * {@code /issuer-jwks} endpoint at verification time — real deployments would use actual Issuer trust
+ * validated presentation. The issuer key is resolved first from the credential's own embedded
+ * {@code x5c} certificate chain (self-signed, no CA validation — demo-only), falling back to fetching
+ * the demo Wallet's own {@code /issuer-jwks} endpoint for credentials that carry no {@code x5c} (only
+ * our own demo Wallet's self-issued credential). Real deployments would use actual Issuer trust
  * configuration instead.
  */
 @Configuration
@@ -111,7 +121,13 @@ public class SecurityConfig {
         RestClient restClient = RestClient.create();
         ObjectMapper mapper = new ObjectMapper();
         String jwksUri = walletBaseUrl + "/issuer-jwks";
-        return (issuer, keyId) -> {
+        return (issuer, keyId, certificateChain) -> {
+            if (!certificateChain.isEmpty()) {
+                Optional<JsonNode> fromCertificateChain = resolveFromCertificateChain(certificateChain, mapper);
+                if (fromCertificateChain.isPresent()) {
+                    return fromCertificateChain;
+                }
+            }
             try {
                 String body = restClient.get().uri(jwksUri).retrieve().body(String.class);
                 JsonNode jwks = mapper.readTree(body);
@@ -125,5 +141,26 @@ public class SecurityConfig {
                 return Optional.empty();
             }
         };
+    }
+
+    /**
+     * Extracts the issuer's public key straight from the leaf certificate of a credential's own
+     * {@code x5c} chain — no chain-of-trust/CA validation, demo-only (same self-signed, no-real-PKI
+     * pattern as {@link DemoVerifierSigningKeyConfig}). This lets the Verifier accept credentials from
+     * any Wallet whose issuer self-signs its key, not just our own demo Wallet.
+     */
+    private static Optional<JsonNode> resolveFromCertificateChain(List<String> certificateChain, ObjectMapper mapper) {
+        try {
+            CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+            byte[] leafCertDer = Base64.getDecoder().decode(certificateChain.get(0));
+            X509Certificate leafCert = (X509Certificate)
+                    certificateFactory.generateCertificate(new ByteArrayInputStream(leafCertDer));
+            ECPublicKey publicKey = (ECPublicKey) leafCert.getPublicKey();
+            ECKey jwk = new ECKey.Builder(Curve.P_256, publicKey).build();
+            return Optional.of(mapper.readTree(jwk.toJSONString()));
+        } catch (Exception e) {
+            log.warn("Failed to extract issuer key from x5c certificate chain: {}", e.toString());
+            return Optional.empty();
+        }
     }
 }

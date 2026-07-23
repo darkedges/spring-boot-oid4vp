@@ -115,7 +115,7 @@ class WalletAuthorizationResponseBuilderTest {
 
         // Now hand it to the Verifier side and confirm it validates end-to-end.
         JsonNode issuerJwk = MAPPER.readTree(issuerKey().toJSONString());
-        IssuerKeyResolver issuerKeyResolver = (issuer, keyId) -> Optional.of(issuerJwk);
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerJwk);
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
 
