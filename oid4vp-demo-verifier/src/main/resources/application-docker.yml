@@ -13,5 +13,5 @@ oid4vp:
   verifier:
     relying-party:
       demo:
-        client-id: "redirect_uri:http://verifier:8090/login/oid4vp/direct-post/demo"
+        client-id: "x509_san_dns:verifier"
         response-uri: "http://verifier:8090/login/oid4vp/direct-post/demo"

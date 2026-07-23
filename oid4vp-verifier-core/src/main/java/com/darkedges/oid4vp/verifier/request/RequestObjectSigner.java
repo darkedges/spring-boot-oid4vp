@@ -24,6 +24,11 @@ import java.util.Optional;
  * <p>{@code wallet_nonce}, when present, is the value the Wallet sent when fetching the Request Object
  * via {@code request_uri_method=post}; OpenID4VP 1.1 requires it be echoed back inside the signed
  * Request Object.
+ *
+ * <p>When {@code signingJwk} carries an {@code x5c} certificate chain, it's copied into the JWS header —
+ * required by the {@code x509_san_dns}/{@code x509_hash} Client Identifier Prefixes, where the Wallet
+ * verifies the signature directly against the leaf certificate in the request itself rather than
+ * resolving a key some other way.
  */
 public final class RequestObjectSigner {
 
@@ -46,6 +51,9 @@ public final class RequestObjectSigner {
         JWSHeader.Builder header = new JWSHeader.Builder(alg).type(new JOSEObjectType(TYPE));
         if (key.getKeyID() != null) {
             header.keyID(key.getKeyID());
+        }
+        if (key.getX509CertChain() != null && !key.getX509CertChain().isEmpty()) {
+            header.x509CertChain(key.getX509CertChain());
         }
 
         JWTClaimsSet claimsSet;

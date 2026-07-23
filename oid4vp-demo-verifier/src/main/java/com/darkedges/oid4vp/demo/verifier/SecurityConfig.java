@@ -1,5 +1,6 @@
 package com.darkedges.oid4vp.demo.verifier;
 
+import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
@@ -9,6 +10,7 @@ import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestReposi
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nimbusds.jose.JWSAlgorithm;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -47,6 +49,7 @@ public class SecurityConfig {
             Oid4vpTransactionResultRepository transactionResultRepository,
             @Qualifier("sdJwtVcPresentationVerifier") PresentationVerifier sdJwtVcPresentationVerifier,
             IssuerKeyResolver issuerKeyResolver,
+            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
             @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri)
             throws Exception {
 
@@ -59,6 +62,8 @@ public class SecurityConfig {
                         .authorizationRequestRepository(requestRepository)
                         .presentationVerifier(sdJwtVcPresentationVerifier)
                         .issuerKeyResolver(issuerKeyResolver)
+                        .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)
+                        .requestObjectSigningAlgorithm(JWSAlgorithm.ES256)
                         .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
                         .sameDeviceResultRedirectUri("/"));
 

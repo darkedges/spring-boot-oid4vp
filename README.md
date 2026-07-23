@@ -209,6 +209,33 @@ fetched **by the browser** itself (the "Sign in with Wallet" page calling `/pres
 plain `docker` these differ (container-internal vs. published-port), so they're separate properties on
 purpose; don't merge them back into one.
 
+### Signed Authorization Requests (`request_uri`)
+
+`GET /oid4vp/request/{registrationId}` (e.g. `/oid4vp/request/demo`) hosts a **signed** Request Object —
+`application/oauth-authz-req+jwt`, per RFC9101/OpenID4VP's `request_uri` mechanism — alongside the
+existing plain-JSON `/oid4vp/authorize/demo` (which the demo Wallet keeps using unchanged; nothing here
+affects that path).
+
+This exists for talking to a real/conformant Wallet — e.g. the OpenID Foundation's conformance suite, or
+anything that won't just trust an unsigned inline request the way the demo Wallet does. Signing requires
+switching the relying-party's `client-id` from `redirect_uri:...` to `x509_san_dns:<hostname>`: per spec,
+"implementations requiring signed requests cannot use the `redirect_uri` Client Identifier Prefix" (there's
+no key for the Wallet to verify against). `x509_san_dns` instead carries the signer's certificate chain
+directly in the JWS header's `x5c` field, so the Wallet verifies the signature against the leaf cert
+without needing to resolve a key some other way.
+
+The signing key is `oid4vp-demo-verifier/src/main/resources/demo-verifier-signing-key.p12` — a self-signed
+EC (P-256) cert generated once via `openssl` (see `DemoVerifierSigningKeyConfig`), with SANs covering
+`localhost`, `verifier` (the docker-compose service name), and `verify.irving.au` (the Cloudflare domain),
+matching whichever `client-id` each profile uses. It's demo-only, not a pattern for a real deployment,
+which would use a certificate issued by a CA the relying Wallets actually trust. Loaded via plain
+`java.security.KeyStore` rather than Nimbus's `ECKey.load(KeyStore, ...)` convenience method, which pulls
+in BouncyCastle internally — this project has no BC dependency and it wasn't worth adding one just for
+that.
+
+If you regenerate the cert for different hostnames, keep the `client-id` values in `application.yml` /
+`application-docker.yml` / `application-cloudflare.yml` in sync with its SANs.
+
 ## Notes
 
 - The Wallet self-issuing its own credential (`DemoCredentialConfig`) is a demo-only shortcut —

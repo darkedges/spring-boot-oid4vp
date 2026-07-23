@@ -13,5 +13,5 @@ oid4vp:
   verifier:
     relying-party:
       demo:
-        client-id: "redirect_uri:https://verify.irving.au/login/oid4vp/direct-post/demo"
+        client-id: "x509_san_dns:verify.irving.au"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/demo"
