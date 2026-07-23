@@ -7,6 +7,7 @@
 # on localhost — same as the non-docker case.
 demo:
   wallet-base-url: http://wallet:8081
+  verifier-base-url-for-wallet: http://verifier:8090
 
 oid4vp:
   verifier:

@@ -52,7 +52,7 @@ public class SecurityConfig {
 
         http.csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/oid4vp/**", "/login/oid4vp/**").permitAll()
+                        .requestMatchers("/", "/index.html", "/demo-config", "/oid4vp/**", "/login/oid4vp/**").permitAll()
                         .anyRequest().authenticated())
                 .with(Oid4vpLoginConfigurer.oid4vpLogin(), configurer -> configurer
                         .relyingPartyRegistrationRepository(registrations)

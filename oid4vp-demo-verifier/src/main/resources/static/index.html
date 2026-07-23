@@ -129,10 +129,15 @@
     signInBtn.disabled = true;
     setStatus("Asking your Wallet to build a presentation…");
     try {
+      // The URL we hand the Wallet to fetch our Authorization Request from isn't always our own origin:
+      // under docker-compose, the Wallet's container can't reach us via "localhost" (see /demo-config).
+      const configRes = await fetch("/demo-config");
+      const config = await configRes.json();
+
       const presentRes = await fetch(WALLET_URL + "/present", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verifierAuthorizeUrl: window.location.origin + "/oid4vp/authorize/demo" })
+        body: JSON.stringify({ verifierAuthorizeUrl: config.verifierAuthorizeUrlForWallet })
       });
 
       if (!presentRes.ok) {

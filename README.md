@@ -62,6 +62,13 @@ This relies on the library's same-device `response_code`/`redirect_uri` handoff
 (`Oid4vpTransactionResultFilter`) redirecting to `/` on success rather than returning its default bare
 `{}` JSON ack — configured via `.sameDeviceResultRedirectUri("/")` in `SecurityConfig`.
 
+The page also can't hardcode which URL to hand the Wallet for fetching the Authorization Request:
+bare-metal that's the page's own origin (`http://localhost:8090`), but under docker-compose the Wallet's
+container can't reach that — its `localhost` is itself, not the Verifier. `GET /demo-config`
+(`DemoConfigController`, backed by `demo.verifier-base-url-for-wallet`, overridden in
+`application-docker.yml` to the compose service name) tells the page the right URL for whichever mode
+it's running in.
+
 Start both apps (`docker compose up --build`, or bare-metal per below) and open
 [http://localhost:8090](http://localhost:8090).
 

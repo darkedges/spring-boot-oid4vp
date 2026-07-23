@@ -3,6 +3,11 @@ server:
 
 demo:
   wallet-base-url: http://localhost:8081
+  # The URL the Wallet itself must use to fetch our /oid4vp/authorize/demo endpoint — same as
+  # demo.wallet-base-url's reasoning, mirrored the other direction. Bare-metal: same origin the browser
+  # uses. Under docker (see application-docker.yml): the compose service name, since "localhost" inside
+  # the Wallet's container is itself, not us.
+  verifier-base-url-for-wallet: http://localhost:8090
 
 oid4vp:
   verifier:
