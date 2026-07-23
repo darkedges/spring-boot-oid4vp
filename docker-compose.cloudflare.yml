@@ -16,3 +16,4 @@ services:
   verifier:
     environment:
       - SPRING_PROFILES_ACTIVE=cloudflare
+      - DEMO_EMPLOYER_NAME=ZKP
