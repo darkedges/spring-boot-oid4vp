@@ -34,11 +34,6 @@ oid4vp:
         # use the redirect_uri Client Identifier Prefix". Must be a SAN on demo-verifier-signing-key.p12.
         client-id: "x509_san_dns:localhost"
         response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
-        # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
-        # GET /oid4vp/invoke/demo — see README: "Signed Authorization Requests". Unset by default (no
-        # wallet invocation possible); the CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in
-        # docker-compose.yml sets this.
-        wallet-authorization-endpoint: ""
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},

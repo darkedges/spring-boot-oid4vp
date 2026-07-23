@@ -19,9 +19,5 @@ services:
       # Name shown on the browser demo page ("<name> Employee Verification"). Set in your shell or a
       # .env file to rebrand without touching application.yml — defaults to Acme Corp otherwise.
       - DEMO_EMPLOYER_NAME=${DEMO_EMPLOYER_NAME:-Acme Corp}
-      # A Wallet's (or a conformance test run's exported) authorization_endpoint — set this to enable
-      # GET /oid4vp/invoke/demo, which redirects a browser there with client_id/request_uri attached. See
-      # README: "Signed Authorization Requests". Empty by default (no wallet invocation possible).
-      - OID4VP_VERIFIER_RELYINGPARTY_DEMO_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT:-}
     depends_on:
       - wallet

@@ -4,6 +4,8 @@ import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.DcqlQueryReader;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefixParser;
+import com.darkedges.oid4vp.core.request.ClientMetadata;
+import com.darkedges.oid4vp.core.request.ClientMetadataReader;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.jwtvcjson.JwtVcJsonVerifier;
@@ -84,6 +86,8 @@ public class Oid4vpVerifierAutoConfiguration {
     private static Oid4vpRelyingPartyRegistration toRegistration(String registrationId, Oid4vpProperties.RelyingParty relyingParty) {
         ClientIdentifierPrefix clientId = ClientIdentifierPrefixParser.parse(relyingParty.getClientId());
         DcqlQuery dcqlQuery = readDcqlQuery(relyingParty.getDcqlQuery());
+        ResponseMode responseMode = ResponseMode.fromValue(relyingParty.getResponseMode());
+        Optional<ClientMetadata> clientMetadata = readClientMetadata(relyingParty.getClientMetadata());
         Optional<URI> walletAuthorizationEndpoint = Optional.ofNullable(relyingParty.getWalletAuthorizationEndpoint())
                 .filter(value -> !value.isBlank())
                 .map(URI::create);
@@ -91,9 +95,9 @@ public class Oid4vpVerifierAutoConfiguration {
                 registrationId,
                 clientId,
                 URI.create(relyingParty.getResponseUri()),
-                ResponseMode.DIRECT_POST,
+                responseMode,
                 () -> dcqlQuery,
-                Optional.empty(),
+                clientMetadata,
                 walletAuthorizationEndpoint);
     }
 
@@ -102,6 +106,17 @@ public class Oid4vpVerifierAutoConfiguration {
             return DcqlQueryReader.read(MAPPER.readTree(json));
         } catch (Exception e) {
             throw new IllegalStateException("invalid oid4vp.verifier.relying-party.*.dcql-query JSON: " + json, e);
+        }
+    }
+
+    private static Optional<ClientMetadata> readClientMetadata(String json) {
+        if (json == null || json.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(ClientMetadataReader.read(MAPPER.readTree(json)));
+        } catch (Exception e) {
+            throw new IllegalStateException("invalid oid4vp.verifier.relying-party.*.client-metadata JSON: " + json, e);
         }
     }
 }

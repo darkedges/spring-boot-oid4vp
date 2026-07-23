@@ -17,3 +17,12 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=cloudflare
       - DEMO_EMPLOYER_NAME=ZKP
+      # A conformance test run's exported authorization_endpoint — set this to enable
+      # GET /oid4vp/invoke/conformance, which redirects a browser there with client_id/request_uri
+      # attached. See README: "Invoking a Wallet". Deliberately only set here (not in docker-compose.yml):
+      # the "conformance" registration only exists under this profile (application-cloudflare.yml) — even
+      # setting this to an empty string under a profile where "conformance" isn't otherwise fully defined
+      # makes Spring Boot infer a broken partial registration (just this one property, no client-id) and
+      # crash at startup. Empty by default (no wallet invocation possible) is fine *here* because
+      # application-cloudflare.yml already fully defines "conformance" independently of this var.
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCE_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT:-}

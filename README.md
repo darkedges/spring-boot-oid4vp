@@ -246,17 +246,29 @@ that.
 If you regenerate the cert for different hostnames, keep the `client-id` values in `application.yml` /
 `application-docker.yml` / `application-cloudflare.yml` in sync with its SANs.
 
+### A second relying party for conformance testing (`conformance`)
+
+`application-cloudflare.yml` defines a **second** relying-party registration, `conformance`, alongside
+`demo`. Reason: some conformance test plans require `response_mode=direct_post.jwt` (an encrypted
+response), but nothing in `oid4vp-wallet-core` can encrypt a response — our own demo Wallet only ever
+speaks plain `direct_post`. Rather than break the local browser demo, `conformance` is a fully separate
+registration: its own `client-id`/`response-uri`, `response-mode: direct_post.jwt`, and a static demo EC
+encryption key (`DemoVerifierEncryptionKeyConfig` — its public half is embedded in `conformance`'s
+`client-metadata`, matching the checked-in private key used to decrypt). `demo` is untouched either way.
+If a test plan wants plain `direct_post` instead, `demo` already does that.
+
 ### Invoking a Wallet (`GET /oid4vp/invoke/{registrationId}`)
 
-Opening `/oid4vp/invoke/demo` in a browser redirects to a Wallet's `authorization_endpoint` with
+Opening `/oid4vp/invoke/conformance` in a browser redirects to a Wallet's `authorization_endpoint` with
 `client_id`/`request_uri` attached — "in the same way a web-based wallet would be invoked", which is
 exactly how the OpenID Foundation conformance suite documents inviting its own Verifier test plans. This
 is the missing piece for actually driving a conformance test run: create a Verifier test plan in the suite
-(DCQL, `dc+sd-jwt`, `direct_post`, `x509_san_dns` — matching what's built here), start it, copy the
-`authorization_endpoint` URL from its "Exported Values" once it's `WAITING`, and set:
+(DCQL, `dc+sd-jwt`, `x509_san_dns`, and whichever `response_mode` it asks for — `direct_post` maps to the
+`demo` registration, `direct_post.jwt` to `conformance`), start it, copy the `authorization_endpoint` URL
+from its "Exported Values" once it's `WAITING`, and set:
 
 ```bash
-CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" DEMO_EMPLOYER_NAME=ZKP docker compose \
+CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker compose \
   -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
 ```
 
@@ -264,12 +276,15 @@ CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" DEMO_EMPLOY
 its own remote server and fetches `request_uri` itself, so that URL has to be something *its* server can
 reach. Under plain `docker`, `demo.request-uri-base` resolves to `http://localhost:8090`, which is only
 ever reachable from your own machine; the suite gets a plain connection-refused trying to fetch it. Under
-`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real.
+`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real. (This
+env var is deliberately wired into `docker-compose.cloudflare.yml`, not the base file — the `conformance`
+registration only exists under this profile at all; setting it under plain `docker` would make Spring Boot
+infer a broken partial registration from that one property alone and fail to start.)
 
-Then open `https://verify.irving.au/oid4vp/invoke/demo` (not `localhost` — same reasoning) in a browser.
-Unset, `CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT` defaults to empty and that endpoint returns `501` —
-there's deliberately no way to pass a redirect target as a request parameter instead, since that would be
-an open redirect. Each relying-party registration configures its own fixed
+Then open `https://verify.irving.au/oid4vp/invoke/conformance` (not `localhost` — same reasoning) in a
+browser. Unset, `CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT` defaults to empty and that endpoint returns
+`501` — there's deliberately no way to pass a redirect target as a request parameter instead, since that
+would be an open redirect. Each relying-party registration configures its own fixed
 `wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
 here lets a caller redirect anywhere they choose.
 

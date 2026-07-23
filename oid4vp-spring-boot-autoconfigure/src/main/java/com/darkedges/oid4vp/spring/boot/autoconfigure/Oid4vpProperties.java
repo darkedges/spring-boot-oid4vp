@@ -59,6 +59,10 @@ public class Oid4vpProperties {
 
         private String responseUri;
 
+        /** {@code response_mode}, e.g. {@code direct_post} (default) or {@code direct_post.jwt} — the
+         * latter requires {@code client-metadata} to carry a response-encryption {@code jwks} entry. */
+        private String responseMode = "direct_post";
+
         /** The {@code dcql_query} value, as JSON text. */
         private String dcqlQuery;
 
@@ -83,6 +87,14 @@ public class Oid4vpProperties {
 
         public void setResponseUri(String responseUri) {
             this.responseUri = responseUri;
+        }
+
+        public String getResponseMode() {
+            return responseMode;
+        }
+
+        public void setResponseMode(String responseMode) {
+            this.responseMode = responseMode;
         }
 
         public String getDcqlQuery() {

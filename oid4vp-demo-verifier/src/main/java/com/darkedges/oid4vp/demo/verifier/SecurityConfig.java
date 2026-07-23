@@ -3,6 +3,7 @@ package com.darkedges.oid4vp.demo.verifier;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
+import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
 import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpTransactionResultRepository;
@@ -50,6 +51,7 @@ public class SecurityConfig {
             @Qualifier("sdJwtVcPresentationVerifier") PresentationVerifier sdJwtVcPresentationVerifier,
             IssuerKeyResolver issuerKeyResolver,
             RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
+            ResponseDecryptionKeyResolver responseDecryptionKeyResolver,
             @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri,
             @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase)
             throws Exception {
@@ -65,6 +67,9 @@ public class SecurityConfig {
                         .issuerKeyResolver(issuerKeyResolver)
                         .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)
                         .requestObjectSigningAlgorithm(JWSAlgorithm.ES256)
+                        // Only the "conformance" registration actually uses direct_post.jwt — see
+                        // application-cloudflare.yml and DemoVerifierEncryptionKeyConfig.
+                        .responseDecryptionKeyResolver(responseDecryptionKeyResolver)
                         .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
                         .sameDeviceResultRedirectUri("/")
                         .walletInvocation(requestUriBase));
