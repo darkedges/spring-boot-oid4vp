@@ -18,6 +18,11 @@ import java.util.Optional;
  *                       handoff (OpenID4VP 1.1, "Response Mode direct_post" reference design) is in use:
  *                       a secret known only to the Verifier's own frontend session (never sent to the
  *                       Wallet), used to retrieve the Authorization Response once it arrives.
+ * @param codeVerifier   present only for the Authorization Code Grant ({@code response_type=code}): the
+ *                       PKCE code verifier generated when this request was built, kept server-side only
+ *                       (never sent to the Wallet in the initial request — just its {@code code_challenge}
+ *                       derivative), needed later to exchange the returned {@code code} at the Wallet's
+ *                       token endpoint. See {@code Oid4vpAuthorizationCodeCallbackFilter}.
  */
 public record Oid4vpAuthorizationRequestContext(
         String registrationId,
@@ -27,7 +32,8 @@ public record Oid4vpAuthorizationRequestContext(
         DcqlQuery dcqlQuery,
         URI responseUri,
         Instant expiresAt,
-        Optional<String> transactionId) implements Serializable {
+        Optional<String> transactionId,
+        Optional<String> codeVerifier) implements Serializable {
 
     public Oid4vpAuthorizationRequestContext {
         if (registrationId == null || state == null || nonce == null || clientId == null || dcqlQuery == null
@@ -35,12 +41,19 @@ public record Oid4vpAuthorizationRequestContext(
             throw new IllegalArgumentException("all fields of Oid4vpAuthorizationRequestContext are required");
         }
         transactionId = transactionId == null ? Optional.empty() : transactionId;
+        codeVerifier = codeVerifier == null ? Optional.empty() : codeVerifier;
     }
 
     public Oid4vpAuthorizationRequestContext(
             String registrationId, String state, String nonce, ClientIdentifierPrefix clientId,
             DcqlQuery dcqlQuery, URI responseUri, Instant expiresAt) {
-        this(registrationId, state, nonce, clientId, dcqlQuery, responseUri, expiresAt, Optional.empty());
+        this(registrationId, state, nonce, clientId, dcqlQuery, responseUri, expiresAt, Optional.empty(), Optional.empty());
+    }
+
+    public Oid4vpAuthorizationRequestContext(
+            String registrationId, String state, String nonce, ClientIdentifierPrefix clientId,
+            DcqlQuery dcqlQuery, URI responseUri, Instant expiresAt, Optional<String> transactionId) {
+        this(registrationId, state, nonce, clientId, dcqlQuery, responseUri, expiresAt, transactionId, Optional.empty());
     }
 
     public boolean isExpired(Instant now) {

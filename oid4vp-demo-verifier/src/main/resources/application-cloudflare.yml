@@ -52,5 +52,40 @@ oid4vp:
           [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
         # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
         # GET /oid4vp/invoke/conformance — see README: "Invoking a Wallet". Unset by default; the
-        # CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.yml sets this.
+        # CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.cloudflare.yml sets this.
+        wallet-authorization-endpoint: ""
+      # A third registration: some conformance test plans require response_type=code (the OAuth 2.0
+      # Authorization Code Grant, PKCE-protected) instead of vp_token — the VP Token is then delivered in
+      # the Token Response rather than directly from the Wallet. Nothing in this codebase can act as an
+      # OAuth *authorization server* issuing codes — here our own Verifier is the OAuth *client*, and the
+      # Wallet plays the authorization server / token endpoint role. Isolated from "demo"/"conformance" the
+      # same way they're isolated from each other.
+      conformancecode:
+        client-id: "x509_san_dns:verify.irving.au"
+        # Required by Oid4vpRelyingPartyRegistration but functionally unused for this flow: response_type
+        # code has no response_uri at all (see redirect-uri below instead) — nothing ever POSTs here.
+        response-uri: "https://verify.irving.au/login/oid4vp/direct-post/conformancecode"
+        dcql-query: >
+          {"credentials":[{"id":"employee","format":"dc+sd-jwt",
+          "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
+          "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
+        client-metadata: >
+          {"vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
+          "kb-jwt_alg_values":["ES256"]}}}
+        verifier-info: >
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
+        # redirect-uri alone is the code-flow toggle (see CodeFlowConfig) — this Verifier's own callback,
+        # served by Oid4vpAuthorizationCodeCallbackFilter, wired generically at
+        # /oid4vp/callback/{registrationId}. Always set, unlike wallet-token-endpoint below: it's the same
+        # regardless of which conformance test run is active.
+        redirect-uri: "https://verify.irving.au/oid4vp/callback/conformancecode"
+        # Where the returned code is exchanged for the vp_token-bearing Token Response. Deliberately
+        # allowed to stay unset (e.g. before a test run is started) without that being a config error —
+        # /oid4vp/request|invoke/conformancecode still work either way; only the eventual code exchange
+        # needs this, and fails with a clear message if it's still missing at that point. The
+        # CONFORMANCE_CODE_WALLET_TOKEN_ENDPOINT env var in docker-compose.cloudflare.yml sets this.
+        wallet-token-endpoint: ""
+        # Set to a conformance test run's exported authorization_endpoint to enable
+        # GET /oid4vp/invoke/conformancecode. Unset by default; the
+        # CONFORMANCE_CODE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.cloudflare.yml sets this.
         wallet-authorization-endpoint: ""

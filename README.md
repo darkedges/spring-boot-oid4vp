@@ -246,29 +246,47 @@ that.
 If you regenerate the cert for different hostnames, keep the `client-id` values in `application.yml` /
 `application-docker.yml` / `application-cloudflare.yml` in sync with its SANs.
 
-### A second relying party for conformance testing (`conformance`)
+### Extra relying parties for conformance testing (`conformance`, `conformancecode`)
 
-`application-cloudflare.yml` defines a **second** relying-party registration, `conformance`, alongside
-`demo`. Reason: some conformance test plans require `response_mode=direct_post.jwt` (an encrypted
-response), but nothing in `oid4vp-wallet-core` can encrypt a response — our own demo Wallet only ever
-speaks plain `direct_post`. Rather than break the local browser demo, `conformance` is a fully separate
-registration: its own `client-id`/`response-uri`, `response-mode: direct_post.jwt`, and a static demo EC
-encryption key (`DemoVerifierEncryptionKeyConfig` — its public half is embedded in `conformance`'s
-`client-metadata`, matching the checked-in private key used to decrypt). `demo` is untouched either way.
-If a test plan wants plain `direct_post` instead, `demo` already does that.
+`application-cloudflare.yml` defines **two extra** relying-party registrations alongside `demo`, each
+isolated so the local browser demo (`demo`, plain `direct_post`) is never affected:
+
+- **`conformance`** — `response_mode: direct_post.jwt` (encrypted response). Nothing in
+  `oid4vp-wallet-core` can encrypt a response, so our own demo Wallet only ever speaks plain
+  `direct_post`; this registration has its own `client-metadata` carrying a static demo EC encryption key
+  (`DemoVerifierEncryptionKeyConfig` — its public half is embedded there, matching the checked-in private
+  key used to decrypt).
+- **`conformancecode`** — `response_type=code` (the OAuth 2.0 Authorization Code Grant, PKCE-protected).
+  Architecturally inverted from everything else here: per spec, "the VP Token is provided in the Token
+  Response", so *our Verifier* acts as the OAuth client — it sends the initial request (via the same
+  signed `request_uri` hosting), gets a `code` back at `redirect-uri` (`GET /oid4vp/callback/{registrationId}`,
+  `Oid4vpAuthorizationCodeCallbackFilter`), then exchanges it at `wallet-token-endpoint` for a Token
+  Response containing `vp_token` — validated through the exact same code path as `direct_post`
+  (`Oid4vpAuthorizationResponseAuthenticationProvider`; the token type it consumes is fully
+  transport-agnostic, so no library code needed changing there). `redirect-uri` alone is the code-flow
+  toggle on a registration; `wallet-token-endpoint` is independently optional — it's fine for it to stay
+  unset until a real test run supplies one, hosting/invoking still works either way, only the eventual
+  code exchange needs it and fails with a clear message if it's still missing.
+
+If a test plan wants plain `direct_post` instead of either, `demo` already does that.
 
 ### Invoking a Wallet (`GET /oid4vp/invoke/{registrationId}`)
 
-Opening `/oid4vp/invoke/conformance` in a browser redirects to a Wallet's `authorization_endpoint` with
-`client_id`/`request_uri` attached — "in the same way a web-based wallet would be invoked", which is
-exactly how the OpenID Foundation conformance suite documents inviting its own Verifier test plans. This
-is the missing piece for actually driving a conformance test run: create a Verifier test plan in the suite
-(DCQL, `dc+sd-jwt`, `x509_san_dns`, and whichever `response_mode` it asks for — `direct_post` maps to the
-`demo` registration, `direct_post.jwt` to `conformance`), start it, copy the `authorization_endpoint` URL
-from its "Exported Values" once it's `WAITING`, and set:
+Opening `/oid4vp/invoke/conformance` (or `/oid4vp/invoke/conformancecode`) in a browser redirects to a
+Wallet's `authorization_endpoint` with `client_id`/`request_uri` attached — "in the same way a web-based
+wallet would be invoked", which is exactly how the OpenID Foundation conformance suite documents inviting
+its own Verifier test plans. This is the missing piece for actually driving a conformance test run: create
+a Verifier test plan in the suite (DCQL, `dc+sd-jwt`, `x509_san_dns`, and whichever `response_type`/
+`response_mode` it asks for — `direct_post` maps to `demo`, `direct_post.jwt` to `conformance`, `code` to
+`conformancecode`), start it, copy the `authorization_endpoint` URL (and, for the `code` flow, the token
+endpoint URL too) from its "Exported Values" once it's `WAITING`, and set:
 
 ```bash
 CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+# for the code flow instead:
+CONFORMANCE_CODE_WALLET_AUTHORIZATION_ENDPOINT="<exported authorization_endpoint>" \
+  CONFORMANCE_CODE_WALLET_TOKEN_ENDPOINT="<exported token_endpoint>" docker compose \
   -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
 ```
 
@@ -276,15 +294,17 @@ CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker comp
 its own remote server and fetches `request_uri` itself, so that URL has to be something *its* server can
 reach. Under plain `docker`, `demo.request-uri-base` resolves to `http://localhost:8090`, which is only
 ever reachable from your own machine; the suite gets a plain connection-refused trying to fetch it. Under
-`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real. (This
-env var is deliberately wired into `docker-compose.cloudflare.yml`, not the base file — the `conformance`
-registration only exists under this profile at all; setting it under plain `docker` would make Spring Boot
-infer a broken partial registration from that one property alone and fail to start.)
+`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real. (These
+env vars are deliberately wired into `docker-compose.cloudflare.yml`, not the base file — `conformance`/
+`conformancecode` only exist under this profile at all; setting `CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT`
+under plain `docker` would make Spring Boot infer a broken partial `conformance` registration from that one
+property alone and fail to start. `conformancecode`'s two env vars don't have that failure mode — see
+above — but are still cloudflare-only since the registration itself only exists there.)
 
-Then open `https://verify.irving.au/oid4vp/invoke/conformance` (not `localhost` — same reasoning) in a
-browser. Unset, `CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT` defaults to empty and that endpoint returns
-`501` — there's deliberately no way to pass a redirect target as a request parameter instead, since that
-would be an open redirect. Each relying-party registration configures its own fixed
+Then open `https://verify.irving.au/oid4vp/invoke/conformance` (or `.../conformancecode`) — not
+`localhost`, same reasoning — in a browser. Unset, these env vars default to empty and the invoke endpoint
+returns `501` — there's deliberately no way to pass a redirect target as a request parameter instead,
+since that would be an open redirect. Each relying-party registration configures its own fixed
 `wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
 here lets a caller redirect anywhere they choose.
 

@@ -46,7 +46,8 @@ class Oid4vpWalletInvocationFilterTest {
                 Oid4vpWalletInvocationFilterTest::sampleDcqlQuery,
                 Optional.empty(),
                 walletAuthorizationEndpoint,
-                List.of());
+                List.of(),
+                Optional.empty());
         return new InMemoryOid4vpRelyingPartyRegistrationRepository(registration);
     }
 

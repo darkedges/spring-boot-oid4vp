@@ -48,6 +48,8 @@ public final class AuthorizationRequestWriter {
                 array.add(entryNode);
             });
         }
+        request.codeChallenge().ifPresent(challenge -> node.put("code_challenge", challenge));
+        request.codeChallengeMethod().ifPresent(method -> node.put("code_challenge_method", method));
         return node;
     }
 }

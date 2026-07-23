@@ -34,6 +34,10 @@ import java.util.function.Supplier;
  *                                     open redirect.
  * @param verifierInfo      OPTIONAL {@code verifier_info} attestations to include in the Authorization
  *                          Request (OpenID4VP 1.1 "New Authorization Request Parameters").
+ * @param codeFlow          OPTIONAL: when present, this registration uses the OAuth 2.0 Authorization
+ *                          Code Grant ({@code response_type=code}) instead of {@code vp_token} — see
+ *                          {@link CodeFlowConfig}. {@code responseMode} above is ignored when this is
+ *                          present ({@link ResponseMode#QUERY} is used internally).
  */
 public record Oid4vpRelyingPartyRegistration(
         String registrationId,
@@ -43,7 +47,8 @@ public record Oid4vpRelyingPartyRegistration(
         Supplier<DcqlQuery> dcqlQuery,
         Optional<ClientMetadata> clientMetadata,
         Optional<URI> walletAuthorizationEndpoint,
-        List<VerifierInfoEntry> verifierInfo) {
+        List<VerifierInfoEntry> verifierInfo,
+        Optional<CodeFlowConfig> codeFlow) {
 
     public Oid4vpRelyingPartyRegistration {
         if (registrationId == null || registrationId.isBlank()) {
@@ -57,5 +62,6 @@ public record Oid4vpRelyingPartyRegistration(
         clientMetadata = clientMetadata == null ? Optional.empty() : clientMetadata;
         walletAuthorizationEndpoint = walletAuthorizationEndpoint == null ? Optional.empty() : walletAuthorizationEndpoint;
         verifierInfo = verifierInfo == null ? List.of() : List.copyOf(verifierInfo);
+        codeFlow = codeFlow == null ? Optional.empty() : codeFlow;
     }
 }

@@ -2,12 +2,14 @@ package com.darkedges.oid4vp.spring.security.config;
 
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
+import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
 import com.darkedges.oid4vp.spring.security.authentication.Oid4vpAuthorizationResponseAuthenticationProvider;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpAuthorizationRequestRepository;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationCodeCallbackFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestService;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthenticationConverter;
@@ -65,6 +67,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private String walletInvocationRequestUriBase;
     private RequestMatcher walletInvocationRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpWalletInvocationFilter.DEFAULT_INVOKE_URI_PATTERN);
+    private TokenEndpointClient tokenEndpointClient;
+    private String authorizationCodeSuccessRedirectUri;
+    private RequestMatcher authorizationCodeCallbackRequestMatcher = Oid4vpAuthorizationCodeCallbackFilter.defaultRequestMatcher();
 
     public Oid4vpLoginConfigurer<H> relyingPartyRegistrationRepository(Oid4vpRelyingPartyRegistrationRepository repository) {
         this.relyingPartyRegistrationRepository = repository;
@@ -211,6 +216,36 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         return this;
     }
 
+    /**
+     * Enables {@code GET /oid4vp/callback/{registrationId}} ({@link Oid4vpAuthorizationCodeCallbackFilter}):
+     * completes the OAuth 2.0 Authorization Code Grant ({@code response_type=code}) flow for registrations
+     * configured with a {@code CodeFlowConfig} — receives the Wallet's {@code ?code=...&state=...}
+     * redirect, exchanges {@code code} for a Token Response via the supplied client, and authenticates the
+     * resulting {@code vp_token} through the same validation path as {@code direct_post}. Requires
+     * {@link #relyingPartyRegistrationRepository} to also be configured.
+     */
+    public Oid4vpLoginConfigurer<H> authorizationCodeCallback(TokenEndpointClient tokenEndpointClient) {
+        this.tokenEndpointClient = tokenEndpointClient;
+        return this;
+    }
+
+    /** Overrides the default {@code /oid4vp/callback/{registrationId}} path pattern used by
+     * {@link #authorizationCodeCallback}. */
+    public Oid4vpLoginConfigurer<H> authorizationCodeCallbackUriPattern(String pathPattern) {
+        this.authorizationCodeCallbackRequestMatcher = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, pathPattern);
+        return this;
+    }
+
+    /**
+     * Once the Authorization Code Grant's token exchange completes and the {@code SecurityContext} is
+     * established, redirect the End-User's browser here instead of writing the default {@code {}} JSON
+     * body — same idea as {@link #sameDeviceResultRedirectUri}.
+     */
+    public Oid4vpLoginConfigurer<H> authorizationCodeSuccessRedirectUri(String redirectUri) {
+        this.authorizationCodeSuccessRedirectUri = redirectUri;
+        return this;
+    }
+
     @Override
     public void init(H http) {
         if (issuerKeyResolver == null) {
@@ -221,6 +256,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         }
         if (walletInvocationRequestUriBase != null && relyingPartyRegistrationRepository == null) {
             throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .walletInvocation(...)");
+        }
+        if (tokenEndpointClient != null && relyingPartyRegistrationRepository == null) {
+            throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .authorizationCodeCallback(...)");
         }
     }
 
@@ -270,6 +308,13 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
             Oid4vpWalletInvocationFilter walletInvocationFilter = new Oid4vpWalletInvocationFilter(
                     walletInvocationRequestMatcher, relyingPartyRegistrationRepository, walletInvocationRequestUriBase);
             http.addFilterBefore(walletInvocationFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
+        if (tokenEndpointClient != null) {
+            Oid4vpAuthorizationCodeCallbackFilter authorizationCodeCallbackFilter = new Oid4vpAuthorizationCodeCallbackFilter(
+                    authorizationCodeCallbackRequestMatcher, authenticationManager, authorizationRequestRepository,
+                    relyingPartyRegistrationRepository, tokenEndpointClient, authorizationCodeSuccessRedirectUri);
+            http.addFilterBefore(authorizationCodeCallbackFilter, UsernamePasswordAuthenticationFilter.class);
         }
     }
 

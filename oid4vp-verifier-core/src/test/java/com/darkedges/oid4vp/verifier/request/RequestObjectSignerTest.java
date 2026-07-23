@@ -53,7 +53,9 @@ class RequestObjectSignerTest {
                 Optional.empty(),
                 RequestUriMethod.GET,
                 List.of(),
-                List.of());
+                List.of(),
+                Optional.empty(),
+                Optional.empty());
     }
 
     @Test

@@ -13,6 +13,7 @@ import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.jwtvcjson.JwtVcJsonVerifier;
 import com.darkedges.oid4vp.sdjwt.SdJwtVerifier;
 import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
+import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
 import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
@@ -94,6 +95,7 @@ public class Oid4vpVerifierAutoConfiguration {
                 .filter(value -> !value.isBlank())
                 .map(URI::create);
         List<VerifierInfoEntry> verifierInfo = readVerifierInfo(relyingParty.getVerifierInfo());
+        Optional<CodeFlowConfig> codeFlow = readCodeFlow(relyingParty);
         return new Oid4vpRelyingPartyRegistration(
                 registrationId,
                 clientId,
@@ -102,7 +104,24 @@ public class Oid4vpVerifierAutoConfiguration {
                 () -> dcqlQuery,
                 clientMetadata,
                 walletAuthorizationEndpoint,
-                verifierInfo);
+                verifierInfo,
+                codeFlow);
+    }
+
+    /**
+     * {@code redirect-uri} alone is the code-flow toggle — {@code wallet-token-endpoint} is deliberately
+     * allowed to be absent (e.g. not yet known until a conformance test run is started): the Authorization
+     * Request can still be built and hosted without it, and {@code Oid4vpAuthorizationCodeCallbackFilter}
+     * fails with a clear message if it's still missing once actually needed for a token exchange.
+     */
+    private static Optional<CodeFlowConfig> readCodeFlow(Oid4vpProperties.RelyingParty relyingParty) {
+        if (relyingParty.getRedirectUri() == null || relyingParty.getRedirectUri().isBlank()) {
+            return Optional.empty();
+        }
+        Optional<URI> tokenEndpoint = Optional.ofNullable(relyingParty.getWalletTokenEndpoint())
+                .filter(value -> !value.isBlank())
+                .map(URI::create);
+        return Optional.of(new CodeFlowConfig(URI.create(relyingParty.getRedirectUri()), tokenEndpoint));
     }
 
     private static DcqlQuery readDcqlQuery(String json) {

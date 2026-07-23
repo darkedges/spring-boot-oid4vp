@@ -4,10 +4,11 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonValue;
 
 /**
- * The {@code response_mode} Authorization Request parameter. {@link #FRAGMENT} and {@link #QUERY} are
- * modeled only for completeness of the OAuth default (this library targets Verifier-initiated
- * {@code vp_token} flows, not browser-redirect response delivery) — {@link #requireImplemented()} throws
- * for them.
+ * The {@code response_mode} Authorization Request parameter. {@link #QUERY} is the default response mode
+ * for the OAuth 2.0 Authorization Code Grant ({@code response_type=code}), where the VP Token is
+ * delivered in the Token Response rather than directly from the Wallet — see
+ * {@code Oid4vpAuthorizationCodeCallbackFilter}. {@link #FRAGMENT} is modeled only for completeness of the
+ * OAuth default set; {@link #requireImplemented()} still throws for it.
  */
 public enum ResponseMode {
     FRAGMENT("fragment"),
@@ -39,7 +40,7 @@ public enum ResponseMode {
     }
 
     public boolean isImplemented() {
-        return this == DIRECT_POST || this == DIRECT_POST_JWT || this == DC_API || this == DC_API_JWT;
+        return this == DIRECT_POST || this == DIRECT_POST_JWT || this == DC_API || this == DC_API_JWT || this == QUERY;
     }
 
     /** @throws UnsupportedOperationException if this response mode is not yet implemented. */

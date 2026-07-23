@@ -76,6 +76,14 @@ public class Oid4vpProperties {
         /** OPTIONAL {@code verifier_info} value (a JSON array of attestations), as JSON text. */
         private String verifierInfo;
 
+        /** OPTIONAL — set together with {@link #walletTokenEndpoint} to enable the OAuth 2.0
+         * Authorization Code Grant ({@code response_type=code}) for this registration instead of
+         * {@code vp_token} — see {@code CodeFlowConfig}. This Verifier's own callback URL. */
+        private String redirectUri;
+
+        /** OPTIONAL — the Wallet's token endpoint, paired with {@link #redirectUri}. */
+        private String walletTokenEndpoint;
+
         public String getClientId() {
             return clientId;
         }
@@ -130,6 +138,22 @@ public class Oid4vpProperties {
 
         public void setVerifierInfo(String verifierInfo) {
             this.verifierInfo = verifierInfo;
+        }
+
+        public String getRedirectUri() {
+            return redirectUri;
+        }
+
+        public void setRedirectUri(String redirectUri) {
+            this.redirectUri = redirectUri;
+        }
+
+        public String getWalletTokenEndpoint() {
+            return walletTokenEndpoint;
+        }
+
+        public void setWalletTokenEndpoint(String walletTokenEndpoint) {
+            this.walletTokenEndpoint = walletTokenEndpoint;
         }
     }
 }

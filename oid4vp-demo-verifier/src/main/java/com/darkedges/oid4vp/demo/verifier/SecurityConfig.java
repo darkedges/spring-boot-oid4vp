@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.demo.verifier;
 
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
+import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
@@ -18,10 +19,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.MediaType;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.client.RestClient;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 
 /**
@@ -52,6 +56,7 @@ public class SecurityConfig {
             IssuerKeyResolver issuerKeyResolver,
             RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
             ResponseDecryptionKeyResolver responseDecryptionKeyResolver,
+            TokenEndpointClient tokenEndpointClient,
             @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri,
             @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase)
             throws Exception {
@@ -72,9 +77,33 @@ public class SecurityConfig {
                         .responseDecryptionKeyResolver(responseDecryptionKeyResolver)
                         .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
                         .sameDeviceResultRedirectUri("/")
-                        .walletInvocation(requestUriBase));
+                        .walletInvocation(requestUriBase)
+                        // Only the "conformancecode" registration actually uses response_type=code — see
+                        // application-cloudflare.yml.
+                        .authorizationCodeCallback(tokenEndpointClient)
+                        .authorizationCodeSuccessRedirectUri("/"));
 
         return http.build();
+    }
+
+    /** Plain PKCE authorization_code token exchange (RFC 6749 §4.1.3 + RFC 7636) — POSTs form-encoded to
+     * whichever registration's {@code CodeFlowConfig.tokenEndpoint()} the caller supplies. */
+    @Bean
+    public TokenEndpointClient tokenEndpointClient() {
+        RestClient restClient = RestClient.create();
+        return (tokenEndpoint, code, redirectUri, clientId, codeVerifier) -> {
+            String formBody = "grant_type=authorization_code"
+                    + "&code=" + URLEncoder.encode(code, StandardCharsets.UTF_8)
+                    + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8)
+                    + "&client_id=" + URLEncoder.encode(clientId, StandardCharsets.UTF_8)
+                    + "&code_verifier=" + URLEncoder.encode(codeVerifier, StandardCharsets.UTF_8);
+            return restClient.post()
+                    .uri(tokenEndpoint)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .body(formBody)
+                    .retrieve()
+                    .body(JsonNode.class);
+        };
     }
 
     @Bean
