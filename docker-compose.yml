@@ -17,7 +17,7 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=docker
       # Name shown on the browser demo page ("<name> Employee Verification"). Set in your shell or a
-      # .env file to rebrand without touching application.yml — defaults to ZKP otherwise.
-      - DEMO_EMPLOYER_NAME=${DEMO_EMPLOYER_NAME:-ZKP}
+      # .env file to rebrand without touching application.yml — defaults to Acme Corp otherwise.
+      - DEMO_EMPLOYER_NAME=${DEMO_EMPLOYER_NAME:-Acme Corp}
     depends_on:
       - wallet
