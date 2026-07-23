@@ -1,0 +1,17 @@
+# Activated via SPRING_PROFILES_ACTIVE=cloudflare — see docker-compose.cloudflare.yml and the "Hosting
+# behind Cloudflare" section of README.md. Both apps are assumed publicly reachable on their own domain,
+# so every URL below is the public one (including the ones the two apps use to call each other) rather
+# than a docker-compose-internal hostname — this pair is meant to work as if operated by two independent
+# parties, not just two containers on one private network.
+demo:
+  wallet-base-url: https://wallet.zkp.au
+  wallet-base-url-for-browser: https://wallet.zkp.au
+  same-device-result-base-uri: https://verify.irving.au/oid4vp/result
+  verifier-base-url-for-wallet: https://verify.irving.au
+
+oid4vp:
+  verifier:
+    relying-party:
+      demo:
+        client-id: "redirect_uri:https://verify.irving.au/login/oid4vp/direct-post/demo"
+        response-uri: "https://verify.irving.au/login/oid4vp/direct-post/demo"

@@ -1,6 +1,12 @@
 server:
   port: 8081
 
+demo:
+  # Origin allowed to call /present cross-origin (the Verifier's browser demo page), and the value put
+  # in the `iss` claim of the self-issued demo credential. See application-cloudflare.yml.
+  verifier-origin: http://localhost:8090
+  issuer-url: http://localhost:8081
+
 logging:
   level:
     com.darkedges.oid4vp: INFO

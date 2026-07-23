@@ -2,9 +2,9 @@
 #
 # Backend-to-backend URLs (the Wallet container POSTing to response-uri, or fetching issuer-jwks) must
 # use docker-compose service names, since "localhost" inside a container refers to that container itself.
-# demo.same-device-result-base-uri is deliberately NOT overridden here: it's followed by the End-User's
-# browser (or, in this demo, curl running on the host), which reaches the Verifier via its published port
-# on localhost — same as the non-docker case.
+# demo.same-device-result-base-uri and demo.wallet-base-url-for-browser are deliberately NOT overridden
+# here: both are followed by the End-User's browser (or, in this demo, curl running on the host), which
+# reaches either app via its published port on localhost — same as the non-docker case.
 demo:
   wallet-base-url: http://wallet:8081
   verifier-base-url-for-wallet: http://verifier:8090

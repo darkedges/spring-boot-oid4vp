@@ -177,6 +177,32 @@ followed by the End-User's browser (or `demo.sh`, running on your host), which r
 its published port on `localhost` either way. If you rename the services in `docker-compose.yml`, update
 `application-docker.yml` to match.
 
+### Hosting behind Cloudflare
+
+To expose the demo publicly — e.g. Wallet on `wallet.zkp.au`, Verifier on `verify.irving.au` — activate the
+**`cloudflare`** Spring profile instead of (not in addition to) `docker`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+```
+
+`application-cloudflare.yml` in each module sets every URL the two apps use — including the ones they use
+to call *each other* — to the public HTTPS domain, rather than a docker-compose-internal hostname. This is
+deliberate: the pairing is meant to work as if Wallet and Verifier are two independently-hosted parties on
+separate domains, not just two containers on one private network, so nothing round-trips through a
+`localhost`/service-name shortcut that only exists locally. If you're using different domains, edit both
+`application-cloudflare.yml` files (and `docker-compose.cloudflare.yml`'s comment) to match.
+
+You still need to actually get traffic to the containers — this repo doesn't include a Cloudflare Tunnel
+config. Typically that means running `cloudflared` (as a sidecar container or on the host) with two
+ingress rules, one per hostname, pointing at `localhost:8081` (Wallet) and `localhost:8090` (Verifier).
+
+Two properties matter here that are easy to conflate: `demo.wallet-base-url` is fetched **server-side** by
+the Verifier (`IssuerKeyResolver` hitting `/issuer-jwks`), while `demo.wallet-base-url-for-browser` is
+fetched **by the browser** itself (the "Sign in with Wallet" page calling `/present` cross-origin) — under
+plain `docker` these differ (container-internal vs. published-port), so they're separate properties on
+purpose; don't merge them back into one.
+
 ## Notes
 
 - The Wallet self-issuing its own credential (`DemoCredentialConfig`) is a demo-only shortcut —

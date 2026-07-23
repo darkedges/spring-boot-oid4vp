@@ -15,6 +15,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -48,13 +49,15 @@ public class DemoCredentialConfig {
     }
 
     @Bean
-    public SdJwtVcHeldCredential demoCredential(ECKey demoIssuerKey, ECKey demoHolderKey) throws JOSEException {
+    public SdJwtVcHeldCredential demoCredential(
+            ECKey demoIssuerKey, ECKey demoHolderKey,
+            @Value("${demo.issuer-url:http://localhost:8081}") String issuerUrl) throws JOSEException {
         Disclosure givenName = Disclosure.createObjectProperty(randomSalt(), "given_name", TextNode.valueOf("Jane"));
         Disclosure familyName = Disclosure.createObjectProperty(randomSalt(), "family_name", TextNode.valueOf("Demo"));
 
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer("http://localhost:8081")
+                .issuer(issuerUrl)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(3600 * 24 * 365)))
                 .claim("vct", DemoConstants.VCT)

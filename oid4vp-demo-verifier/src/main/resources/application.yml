@@ -2,11 +2,19 @@ server:
   port: 8090
 
 demo:
+  # Fetched server-side (IssuerKeyResolver hitting /issuer-jwks) — under docker (application-docker.yml)
+  # this becomes the compose service name, since it's called Verifier-container -> Wallet-container.
   wallet-base-url: http://localhost:8081
-  # The URL the Wallet itself must use to fetch our /oid4vp/authorize/demo endpoint — same as
-  # demo.wallet-base-url's reasoning, mirrored the other direction. Bare-metal: same origin the browser
-  # uses. Under docker (see application-docker.yml): the compose service name, since "localhost" inside
-  # the Wallet's container is itself, not us.
+  # Fetched by the browser (the Sign in with Wallet page calling /present cross-origin) — deliberately a
+  # SEPARATE property from wallet-base-url above: under docker, wallet-base-url is container-internal and
+  # unreachable from a real browser, but this one always is, since the browser reaches both apps via their
+  # published host ports regardless of docker/bare-metal. Not overridden in application-docker.yml for
+  # that reason (same reasoning as demo.same-device-result-base-uri).
+  wallet-base-url-for-browser: http://localhost:8081
+  # The URL the Wallet itself must use to fetch our /oid4vp/authorize/demo endpoint — same idea as
+  # wallet-base-url above, mirrored the other direction. Bare-metal: same origin the browser uses. Under
+  # docker (see application-docker.yml): the compose service name, since "localhost" inside the Wallet's
+  # container is itself, not us.
   verifier-base-url-for-wallet: http://localhost:8090
 
 oid4vp:

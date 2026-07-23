@@ -84,12 +84,10 @@
 
 </div>
 
-<footer>
-  Demo Wallet: <code>http://localhost:8081</code> &middot; Demo Verifier: <code>http://localhost:8090</code>
-</footer>
+<footer id="footer">Loading configuration…</footer>
 
 <script>
-  const WALLET_URL = "http://localhost:8081";
+  let demoConfig = null;
 
   const loadingEl = document.getElementById("loading");
   const signedOutEl = document.getElementById("signed-out");
@@ -105,6 +103,13 @@
   function setStatus(message, isError) {
     statusEl.textContent = message || "";
     statusEl.classList.toggle("error", Boolean(isError));
+  }
+
+  async function loadDemoConfig() {
+    const res = await fetch("/demo-config");
+    demoConfig = await res.json();
+    document.getElementById("footer").textContent =
+      "Demo Wallet: " + demoConfig.walletBaseUrl + " · Demo Verifier: " + window.location.origin;
   }
 
   async function checkSession() {
@@ -129,15 +134,13 @@
     signInBtn.disabled = true;
     setStatus("Asking your Wallet to build a presentation…");
     try {
-      // The URL we hand the Wallet to fetch our Authorization Request from isn't always our own origin:
-      // under docker-compose, the Wallet's container can't reach us via "localhost" (see /demo-config).
-      const configRes = await fetch("/demo-config");
-      const config = await configRes.json();
-
-      const presentRes = await fetch(WALLET_URL + "/present", {
+      // Neither the Wallet's URL nor the URL we hand it to fetch our Authorization Request from can be
+      // assumed (our own origin / a hardcoded localhost port) — they depend on how the two apps are
+      // deployed (docker-compose vs. separate public domains). See DemoConfigController.
+      const presentRes = await fetch(demoConfig.walletBaseUrl + "/present", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ verifierAuthorizeUrl: config.verifierAuthorizeUrlForWallet })
+        body: JSON.stringify({ verifierAuthorizeUrl: demoConfig.verifierAuthorizeUrlForWallet })
       });
 
       if (!presentRes.ok) {
@@ -158,13 +161,13 @@
       // Real navigation (not fetch) so the Verifier's Set-Cookie actually sticks.
       window.location.href = result.redirect_uri;
     } catch (e) {
-      setStatus("Couldn't reach the Wallet at " + WALLET_URL + " — is it running?", true);
+      setStatus("Couldn't reach the Wallet at " + demoConfig.walletBaseUrl + " — is it running?", true);
       signInBtn.disabled = false;
     }
   }
 
   signInBtn.addEventListener("click", signIn);
-  checkSession();
+  loadDemoConfig().then(checkSession);
 </script>
 
 </body>

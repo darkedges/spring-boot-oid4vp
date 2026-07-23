@@ -1,0 +1,18 @@
+# Layers on top of docker-compose.yml to expose the demo behind Cloudflare, e.g.:
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+# Point a Cloudflare Tunnel at these two hostnames -> localhost ports (see README: "Hosting behind
+# Cloudflare"). Update application-cloudflare.yml in each module first if you're using different domains
+# than wallet.zkp.au / verify.irving.au.
+#
+# Overrides (not adds to) the base file's SPRING_PROFILES_ACTIVE=docker: the "cloudflare" profile fully
+# specifies every URL "docker" would otherwise set to a container-internal hostname, since this pairing
+# is meant to work as if Wallet and Verifier are two independently-hosted parties, not just two
+# containers on one private network — see application-cloudflare.yml in each module for why.
+services:
+  wallet:
+    environment:
+      - SPRING_PROFILES_ACTIVE=cloudflare
+
+  verifier:
+    environment:
+      - SPRING_PROFILES_ACTIVE=cloudflare
