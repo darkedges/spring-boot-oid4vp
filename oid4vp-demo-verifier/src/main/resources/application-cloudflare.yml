@@ -16,6 +16,12 @@ oid4vp:
       demo:
         client-id: "x509_san_dns:verify.irving.au"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/demo"
+        # vp_formats_supported is REQUIRED in client_metadata per spec "when not available to the Wallet
+        # via another mechanism" — a conformance suite acting as Wallet has no other channel to learn it.
+        # Shape matches the spec's own non-normative example for dc+sd-jwt.
+        client-metadata: >
+          {"vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
+          "kb-jwt_alg_values":["ES256"]}}}
       # A second registration, separate from "demo": some conformance test plans require
       # response_mode=direct_post.jwt (encrypted response), which our own demo Wallet can't produce —
       # nothing in oid4vp-wallet-core can encrypt a response yet. Keeping this isolated means the local
@@ -29,11 +35,14 @@ oid4vp:
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
           "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
         # Public half of DemoVerifierEncryptionKeyConfig's static key — keep in sync if regenerated.
+        # vp_formats_supported is REQUIRED (see "demo" above for why); same shape either way.
         client-metadata: >
           {"jwks":{"keys":[{"kty":"EC","use":"enc","crv":"P-256","kid":"demo-verifier-encryption",
           "x":"xrGuOuYtOsauuXNHkXlsFo93P14Yfu1VNXmpZR9-9JI",
           "y":"b_Xpz-0tRjZfXuwuA-UClHGO2P9t03b0qPeV9yn-cY0","alg":"ECDH-ES"}]},
-          "encrypted_response_enc_values_supported":["A128GCM"]}
+          "encrypted_response_enc_values_supported":["A128GCM"],
+          "vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
+          "kb-jwt_alg_values":["ES256"]}}}
         # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
         # GET /oid4vp/invoke/conformance — see README: "Invoking a Wallet". Unset by default; the
         # CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.yml sets this.
