@@ -4,8 +4,10 @@ import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
 import com.darkedges.oid4vp.core.request.ResponseMode;
+import com.darkedges.oid4vp.core.request.VerifierInfoEntry;
 
 import java.net.URI;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -30,6 +32,8 @@ import java.util.function.Supplier;
  *                                     Deliberately operator-configured rather than accepted as a request
  *                                     parameter: an attacker-supplied redirect target here would be an
  *                                     open redirect.
+ * @param verifierInfo      OPTIONAL {@code verifier_info} attestations to include in the Authorization
+ *                          Request (OpenID4VP 1.1 "New Authorization Request Parameters").
  */
 public record Oid4vpRelyingPartyRegistration(
         String registrationId,
@@ -38,7 +42,8 @@ public record Oid4vpRelyingPartyRegistration(
         ResponseMode responseMode,
         Supplier<DcqlQuery> dcqlQuery,
         Optional<ClientMetadata> clientMetadata,
-        Optional<URI> walletAuthorizationEndpoint) {
+        Optional<URI> walletAuthorizationEndpoint,
+        List<VerifierInfoEntry> verifierInfo) {
 
     public Oid4vpRelyingPartyRegistration {
         if (registrationId == null || registrationId.isBlank()) {
@@ -51,5 +56,6 @@ public record Oid4vpRelyingPartyRegistration(
         responseMode.requireImplemented();
         clientMetadata = clientMetadata == null ? Optional.empty() : clientMetadata;
         walletAuthorizationEndpoint = walletAuthorizationEndpoint == null ? Optional.empty() : walletAuthorizationEndpoint;
+        verifierInfo = verifierInfo == null ? List.of() : List.copyOf(verifierInfo);
     }
 }

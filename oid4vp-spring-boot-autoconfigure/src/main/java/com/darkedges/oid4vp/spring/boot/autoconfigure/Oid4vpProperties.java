@@ -73,6 +73,9 @@ public class Oid4vpProperties {
          * see {@code Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint}. */
         private String walletAuthorizationEndpoint;
 
+        /** OPTIONAL {@code verifier_info} value (a JSON array of attestations), as JSON text. */
+        private String verifierInfo;
+
         public String getClientId() {
             return clientId;
         }
@@ -119,6 +122,14 @@ public class Oid4vpProperties {
 
         public void setWalletAuthorizationEndpoint(String walletAuthorizationEndpoint) {
             this.walletAuthorizationEndpoint = walletAuthorizationEndpoint;
+        }
+
+        public String getVerifierInfo() {
+            return verifierInfo;
+        }
+
+        public void setVerifierInfo(String verifierInfo) {
+            this.verifierInfo = verifierInfo;
         }
     }
 }

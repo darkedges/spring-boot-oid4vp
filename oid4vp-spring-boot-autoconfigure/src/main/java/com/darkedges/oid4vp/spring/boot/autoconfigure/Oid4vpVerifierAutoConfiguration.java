@@ -7,6 +7,8 @@ import com.darkedges.oid4vp.core.request.ClientIdentifierPrefixParser;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
 import com.darkedges.oid4vp.core.request.ClientMetadataReader;
 import com.darkedges.oid4vp.core.request.ResponseMode;
+import com.darkedges.oid4vp.core.request.VerifierInfoEntry;
+import com.darkedges.oid4vp.core.request.VerifierInfoReader;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.jwtvcjson.JwtVcJsonVerifier;
 import com.darkedges.oid4vp.sdjwt.SdJwtVerifier;
@@ -91,6 +93,7 @@ public class Oid4vpVerifierAutoConfiguration {
         Optional<URI> walletAuthorizationEndpoint = Optional.ofNullable(relyingParty.getWalletAuthorizationEndpoint())
                 .filter(value -> !value.isBlank())
                 .map(URI::create);
+        List<VerifierInfoEntry> verifierInfo = readVerifierInfo(relyingParty.getVerifierInfo());
         return new Oid4vpRelyingPartyRegistration(
                 registrationId,
                 clientId,
@@ -98,7 +101,8 @@ public class Oid4vpVerifierAutoConfiguration {
                 responseMode,
                 () -> dcqlQuery,
                 clientMetadata,
-                walletAuthorizationEndpoint);
+                walletAuthorizationEndpoint,
+                verifierInfo);
     }
 
     private static DcqlQuery readDcqlQuery(String json) {
@@ -117,6 +121,17 @@ public class Oid4vpVerifierAutoConfiguration {
             return Optional.of(ClientMetadataReader.read(MAPPER.readTree(json)));
         } catch (Exception e) {
             throw new IllegalStateException("invalid oid4vp.verifier.relying-party.*.client-metadata JSON: " + json, e);
+        }
+    }
+
+    private static List<VerifierInfoEntry> readVerifierInfo(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return VerifierInfoReader.read(MAPPER.readTree(json));
+        } catch (Exception e) {
+            throw new IllegalStateException("invalid oid4vp.verifier.relying-party.*.verifier-info JSON: " + json, e);
         }
     }
 }

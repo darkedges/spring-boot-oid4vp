@@ -62,7 +62,7 @@ public final class Oid4vpAuthorizationRequestService {
                 registration.clientMetadata(),
                 RequestUriMethod.GET,
                 List.of(),
-                List.of());
+                registration.verifierInfo());
 
         requestRepository.save(new Oid4vpAuthorizationRequestContext(
                 registrationId, state, nonce, registration.clientId(), dcqlQuery, registration.responseUri(),

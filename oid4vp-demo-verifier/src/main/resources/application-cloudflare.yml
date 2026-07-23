@@ -22,6 +22,11 @@ oid4vp:
         client-metadata: >
           {"vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
           "kb-jwt_alg_values":["ES256"]}}}
+        # OPTIONAL per spec, but some conformance test modules check its structure regardless — a JWT
+        # ("format": "jwt") signed with the same key as the Request Object itself (DemoVerifierSigningKeyConfig).
+        # Content is a demo-only attestation, not from any real trust framework.
+        verifier-info: >
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
       # A second registration, separate from "demo": some conformance test plans require
       # response_mode=direct_post.jwt (encrypted response), which our own demo Wallet can't produce —
       # nothing in oid4vp-wallet-core can encrypt a response yet. Keeping this isolated means the local
@@ -43,6 +48,8 @@ oid4vp:
           "encrypted_response_enc_values_supported":["A128GCM"],
           "vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
           "kb-jwt_alg_values":["ES256"]}}}
+        verifier-info: >
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
         # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
         # GET /oid4vp/invoke/conformance — see README: "Invoking a Wallet". Unset by default; the
         # CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.yml sets this.

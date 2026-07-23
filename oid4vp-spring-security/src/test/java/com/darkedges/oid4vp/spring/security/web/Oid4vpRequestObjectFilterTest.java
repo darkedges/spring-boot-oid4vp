@@ -52,7 +52,8 @@ class Oid4vpRequestObjectFilterTest {
                 ResponseMode.DIRECT_POST,
                 () -> dcqlQuery,
                 Optional.empty(),
-                Optional.empty());
+                Optional.empty(),
+                List.of());
         return new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration),
                 new InMemoryOid4vpAuthorizationRequestRepository(),
