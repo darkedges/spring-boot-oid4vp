@@ -113,6 +113,73 @@ class MdocVerifierTest {
                 .hasMessageContaining("COSE_Sign1 signature verification failed");
     }
 
+    @Test
+    void rejectsDeviceAuthSignedOverTheUnwrappedDeviceAuthenticationBytes() throws Exception {
+        // ISO 18013-5 requires DeviceSignature to be computed over DeviceAuthenticationBytes =
+        // #6.24(bstr .cbor DeviceAuthentication) -- the tag-24-wrapped encoding, not the raw
+        // DeviceAuthentication array bytes. A real prior bug: this exact omission signed/verified the
+        // raw array on both sides, which self-consistent round-trip tests can't catch since they share
+        // the same (then-wrong) construction. Building the un-wrapped variant explicitly here locks in
+        // that the Verifier requires the correct wrapping, independent of what the Wallet-side builder does.
+        KeyPair issuerKeys = TestMdocFixtures.generateEcKeyPair();
+        KeyPair deviceKeys = TestMdocFixtures.generateEcKeyPair();
+        JsonNode encryptionJwk = TestMdocFixtures.publicJwk(TestMdocFixtures.generateEcKeyPair().getPublic());
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+
+        String presentation = buildDeviceResponseWithUnwrappedDeviceAuthSignature(
+                issuerKeys, deviceKeys, encryptionJwk, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
+
+        assertThatThrownBy(() -> new MdocVerifier().verify(
+                new PresentationEntry.StringPresentation(presentation), params(issuerKeys, encryptionJwk, now)))
+                .isInstanceOf(MdocVerificationException.class)
+                .hasMessageContaining("DeviceAuth")
+                .hasMessageContaining("COSE_Sign1 signature verification failed");
+    }
+
+    private static String buildDeviceResponseWithUnwrappedDeviceAuthSignature(
+            KeyPair issuerKeys, KeyPair deviceKeys, JsonNode encryptionJwk, Instant now, java.util.Map<String, String> claims)
+            throws Exception {
+        byte[] issuerSignedBytes = TestMdocFixtures.buildIssuerSigned(
+                issuerKeys, (ECPublicKey) deviceKeys.getPublic(), now, DOC_TYPE, NAMESPACE, claims);
+        DataItem issuerSigned = CborUtil.decodeSingle(issuerSignedBytes);
+
+        DataItem deviceNameSpacesBytes = TestMdocFixtures.wrapTag24(new Map());
+        byte[] jwkThumbprint = com.nimbusds.jose.jwk.JWK.parse(encryptionJwk.toString()).computeThumbprint().decode();
+        byte[] sessionTranscript = SessionTranscript.build(CLIENT_ID, NONCE, Optional.of(jwkThumbprint), RESPONSE_URI);
+        byte[] deviceAuthentication = CborUtil.encode(new CborBuilder()
+                .addArray()
+                .add("DeviceAuthentication")
+                .add(CborUtil.decodeSingle(sessionTranscript))
+                .add(DOC_TYPE)
+                .add(deviceNameSpacesBytes)
+                .end()
+                .build()
+                .get(0));
+        // Deliberately NOT tag-24-wrapped -- the bug under test.
+        byte[] deviceSignatureCose = TestMdocFixtures.coseSign1(
+                deviceKeys.getPrivate(), CborUtil.encode(TestMdocFixtures.algHeader()), deviceAuthentication, null);
+
+        Map deviceAuth = new Map();
+        deviceAuth.put(new UnicodeString("deviceSignature"), CborUtil.decodeSingle(deviceSignatureCose));
+        Map deviceSigned = new Map();
+        deviceSigned.put(new UnicodeString("nameSpaces"), deviceNameSpacesBytes);
+        deviceSigned.put(new UnicodeString("deviceAuth"), deviceAuth);
+
+        Map document = new Map();
+        document.put(new UnicodeString("docType"), new UnicodeString(DOC_TYPE));
+        document.put(new UnicodeString("issuerSigned"), issuerSigned);
+        document.put(new UnicodeString("deviceSigned"), deviceSigned);
+
+        Array documents = new Array();
+        documents.add(document);
+        Map deviceResponse = new Map();
+        deviceResponse.put(new UnicodeString("version"), new UnicodeString("1.0"));
+        deviceResponse.put(new UnicodeString("documents"), documents);
+        deviceResponse.put(new UnicodeString("status"), new UnsignedInteger(0));
+
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(CborUtil.encode(deviceResponse));
+    }
+
     private static PresentationVerificationParams params(KeyPair issuerKeys, JsonNode encryptionJwk, Instant now) {
         CredentialQuery query = CredentialQuery.builder("mdl", CredentialFormat.MSO_MDOC)
                 .meta(new MsoMdocMeta(DOC_TYPE))
