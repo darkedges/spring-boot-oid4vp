@@ -65,10 +65,10 @@ oid4vp:
       conformancemdoc:
         client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/conformancemdoc"
-        # mso_mdoc's SessionTranscript needs a mdocGeneratedNonce with nowhere else to travel back to the
-        # Verifier except an encrypted response's JWE apu header (see MdocVerifier/ResponseDecryptor) — an
-        # unencrypted direct_post has no channel for it, so this registration cannot be plain direct_post.
         response-mode: "direct_post.jwt"
+        # Same "Request URI Method post" exercise as "conformance" above — kept on here too so this
+        # registration's own conformance runs cover it instead of always reporting it skipped.
+        request-uri-method: "post"
         dcql-query: >
           {"credentials":[{"id":"mdl","format":"mso_mdoc",
           "meta":{"doctype_value":"org.iso.18013.5.1.mDL"},
