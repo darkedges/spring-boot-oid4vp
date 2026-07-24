@@ -14,10 +14,10 @@ import java.util.Optional;
  * @implNote {@code audienceOverride} exists for the Digital Credentials API: since there is no
  * {@code client_id}-based channel there, the expected audience is {@code origin:<origin>} instead of the
  * Verifier's Client Identifier (OpenID4VP 1.1, "Request" under "OpenID4VP over the Digital Credentials API").
- * {@code mdocGeneratedNonce} — see
- * {@link com.darkedges.oid4vp.core.response.PresentationVerificationParams#mdocGeneratedNonce()} — is
- * only ever present for a successfully decrypted response whose JWE carried an {@code apu} header;
- * meaningless (and always empty) on an error token, since there's no presentation to verify.
+ * {@code responseEncryptionPublicJwkJson} — see
+ * {@link com.darkedges.oid4vp.core.response.PresentationVerificationParams#responseEncryptionPublicJwk()}
+ * — is only ever present for a successfully decrypted response; meaningless (and always empty) on an
+ * error token, since there's no presentation to verify.
  */
 public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuthenticationToken {
 
@@ -26,18 +26,18 @@ public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuth
     private final String error;
     private final String errorDescription;
     private final String audienceOverride;
-    private final String mdocGeneratedNonce;
+    private final String responseEncryptionPublicJwkJson;
 
     private Oid4vpAuthorizationResponseAuthenticationToken(
             Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String error, String errorDescription,
-            String audienceOverride, String mdocGeneratedNonce) {
+            String audienceOverride, String responseEncryptionPublicJwkJson) {
         super(AuthorityUtils.NO_AUTHORITIES);
         this.requestContext = requestContext;
         this.vpTokenJson = vpTokenJson;
         this.error = error;
         this.errorDescription = errorDescription;
         this.audienceOverride = audienceOverride;
-        this.mdocGeneratedNonce = mdocGeneratedNonce;
+        this.responseEncryptionPublicJwkJson = responseEncryptionPublicJwkJson;
         setAuthenticated(false);
     }
 
@@ -51,8 +51,9 @@ public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuth
     }
 
     public Oid4vpAuthorizationResponseAuthenticationToken(
-            Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String audienceOverride, String mdocGeneratedNonce) {
-        this(requestContext, vpTokenJson, null, null, audienceOverride, mdocGeneratedNonce);
+            Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String audienceOverride,
+            String responseEncryptionPublicJwkJson) {
+        this(requestContext, vpTokenJson, null, null, audienceOverride, responseEncryptionPublicJwkJson);
     }
 
     public static Oid4vpAuthorizationResponseAuthenticationToken ofError(
@@ -87,8 +88,10 @@ public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuth
         return Optional.ofNullable(audienceOverride);
     }
 
-    public Optional<String> mdocGeneratedNonce() {
-        return Optional.ofNullable(mdocGeneratedNonce);
+    /** The response-encryption public key (raw JSON, kept crypto-library-agnostic) this response was
+     * actually decrypted with — see {@link com.darkedges.oid4vp.core.response.PresentationVerificationParams}. */
+    public Optional<String> responseEncryptionPublicJwkJson() {
+        return Optional.ofNullable(responseEncryptionPublicJwkJson);
     }
 
     @Override

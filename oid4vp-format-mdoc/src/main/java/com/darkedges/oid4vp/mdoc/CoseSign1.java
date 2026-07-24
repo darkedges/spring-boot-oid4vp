@@ -168,23 +168,28 @@ final class CoseSign1 {
     }
 
     /** Verifies the signature over this COSE_Sign1's embedded payload — {@code IssuerAuth}'s usage,
-     * where the payload (the MSO) is carried inline. */
-    void verify(PublicKey publicKey) {
-        verifyOverPayload(publicKey, payload());
+     * where the payload (the MSO) is carried inline.
+     * @param context a short label (e.g. {@code "IssuerAuth"}) included in any failure message, so a
+     *                caller verifying more than one COSE_Sign1 (mdoc always does: IssuerAuth and
+     *                DeviceAuth) can tell which one actually failed. */
+    void verify(PublicKey publicKey, String context) {
+        verifyOverPayload(publicKey, payload(), context);
     }
 
     /** Verifies the signature with a payload supplied externally rather than embedded — mdoc's
      * {@code DeviceAuth.deviceSignature} usage, whose COSE_Sign1 payload field is {@code nil} because the
      * signed content ({@code DeviceAuthentication}) is reconstructed by both sides rather than
-     * transmitted. */
-    void verifyDetached(PublicKey publicKey, byte[] detachedPayload) {
-        verifyOverPayload(publicKey, detachedPayload);
+     * transmitted.
+     * @param context see {@link #verify(PublicKey, String)}. */
+    void verifyDetached(PublicKey publicKey, byte[] detachedPayload, String context) {
+        verifyOverPayload(publicKey, detachedPayload, context);
     }
 
-    private void verifyOverPayload(PublicKey publicKey, byte[] payloadBytes) {
+    private void verifyOverPayload(PublicKey publicKey, byte[] payloadBytes, String context) {
         DataItem algItem = protectedHeader.get(LABEL_ALG);
         if (algItem != null && !algItem.equals(ALG_ES256)) {
-            throw new MdocVerificationException("unsupported COSE algorithm (only ES256 is supported): " + algItem);
+            throw new MdocVerificationException(
+                    context + ": unsupported COSE algorithm (only ES256 is supported): " + algItem);
         }
 
         byte[] sigStructure = CborUtil.encode(new CborBuilder()
@@ -201,7 +206,7 @@ final class CoseSign1 {
         try {
             derSignature = ECDSA.transcodeSignatureToDER(signature);
         } catch (JOSEException e) {
-            throw new MdocVerificationException("COSE_Sign1 signature is not a valid ES256 signature", e);
+            throw new MdocVerificationException(context + ": COSE_Sign1 signature is not a valid ES256 signature", e);
         }
 
         try {
@@ -209,10 +214,10 @@ final class CoseSign1 {
             verifier.initVerify(publicKey);
             verifier.update(sigStructure);
             if (!verifier.verify(derSignature)) {
-                throw new MdocVerificationException("COSE_Sign1 signature verification failed");
+                throw new MdocVerificationException(context + ": COSE_Sign1 signature verification failed");
             }
         } catch (GeneralSecurityException e) {
-            throw new MdocVerificationException("COSE_Sign1 signature verification failed", e);
+            throw new MdocVerificationException(context + ": COSE_Sign1 signature verification failed", e);
         }
     }
 }

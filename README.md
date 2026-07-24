@@ -256,11 +256,14 @@ isolated so the local browser demo (`demo`, plain `direct_post`) is never affect
   Authorization Request (`EphemeralEncryptionKeyGenerator`) and injects the public half into that
   request's `client_metadata.jwks` — see "Notes" below.
 - **`conformancemdoc`** — `response_mode: direct_post.jwt`, `credential_format=iso_mdl` (`mso_mdoc`
-  instead of `dc+sd-jwt`). Encryption is mandatory here for a protocol reason, not just a conformance-suite
-  one: mdoc's `SessionTranscript` needs a Wallet-generated `mdocGeneratedNonce` that travels back to the
-  Verifier only via the encrypted response's JWE `apu` header (`ResponseDecryptor.extractMdocGeneratedNonce`
-  / `oid4vp-wallet-core`'s `ResponseEncryptor`) — there's no unencrypted `direct_post` variant of this
-  registration the way `conformance`/`demo` differ only in encryption.
+  instead of `dc+sd-jwt`). mdoc's `OpenID4VPHandover`/`SessionTranscript` (OpenID4VP 1.1 §"Handover and
+  SessionTranscript Definitions") binds the presentation to the RFC 7638 thumbprint of the Verifier's
+  response-encryption public key when the response is encrypted, or CBOR `null` when it isn't — both
+  sides derive this independently from a key they already hold (`client_metadata.jwks` on the Wallet
+  side, the same key by `kid` on the Verifier's decryption side —
+  `ResponseDecryptor.resolveResponseEncryptionPublicJwk` / `oid4vp-wallet-core`'s `ResponseEncryptor`), so
+  mdoc itself doesn't actually require encryption. This registration still uses `direct_post.jwt` because
+  the conformance test plans it targets do.
 - **`conformancecode`** — `response_type=code` (the OAuth 2.0 Authorization Code Grant, PKCE-protected).
   Architecturally inverted from everything else here: per spec, "the VP Token is provided in the Token
   Response", so *our Verifier* acts as the OAuth client — it sends the initial request (via the same

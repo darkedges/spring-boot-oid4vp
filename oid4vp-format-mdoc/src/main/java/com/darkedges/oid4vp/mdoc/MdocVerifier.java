@@ -62,8 +62,9 @@ public final class MdocVerifier implements PresentationVerifier {
         Map issuerSigned = CborUtil.requireMap(CborUtil.get(document, "issuerSigned"));
         CoseSign1 issuerAuth = CoseSign1.parse(CborUtil.get(issuerSigned, "issuerAuth"));
 
-        ECPublicKey issuerKey = resolveIssuerKey(docType, issuerAuth.x5chain(), params);
-        issuerAuth.verify(issuerKey);
+        List<String> issuerCertificateChain = issuerAuth.x5chain();
+        ECPublicKey issuerKey = resolveIssuerKey(docType, issuerCertificateChain, params);
+        issuerAuth.verify(issuerKey, "IssuerAuth (x5chain has " + issuerCertificateChain.size() + " cert(s))");
 
         DataItem msoWrapper = CborUtil.decodeSingle(issuerAuth.payload());
         MobileSecurityObject mso = MobileSecurityObject.parse(CborUtil.unwrapEncodedCbor(msoWrapper));
@@ -142,12 +143,9 @@ public final class MdocVerifier implements PresentationVerifier {
     }
 
     private void verifyDeviceAuth(Map document, String docType, MobileSecurityObject mso, PresentationVerificationParams params) {
-        String mdocGeneratedNonce = params.mdocGeneratedNonce()
-                .orElseThrow(() -> new MdocVerificationException(
-                        "no mdocGeneratedNonce available -- mso_mdoc presentations require an encrypted "
-                                + "response (direct_post.jwt/dc_api.jwt) carrying it in the JWE \"apu\" header"));
+        Optional<byte[]> jwkThumbprint = params.responseEncryptionPublicJwk().map(MdocVerifier::computeThumbprint);
         byte[] sessionTranscript = SessionTranscript.build(
-                params.clientId(), params.responseUri(), params.expectedNonce(), mdocGeneratedNonce);
+                params.clientId(), params.expectedNonce(), jwkThumbprint, params.responseUri());
 
         Map deviceSigned = CborUtil.requireMap(CborUtil.get(document, "deviceSigned"));
         DataItem deviceNameSpacesBytes = CborUtil.get(deviceSigned, "nameSpaces");
@@ -167,7 +165,7 @@ public final class MdocVerifier implements PresentationVerifier {
                 .build()
                 .get(0));
 
-        CoseSign1.parse(deviceSignatureItem).verifyDetached(mso.deviceKey(), deviceAuthentication);
+        CoseSign1.parse(deviceSignatureItem).verifyDetached(mso.deviceKey(), deviceAuthentication, "DeviceAuth");
     }
 
     private static MessageDigest digestFor(String digestAlgorithm) {
@@ -179,6 +177,16 @@ public final class MdocVerifier implements PresentationVerifier {
             return MessageDigest.getInstance(javaName);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException(e);
+        }
+    }
+
+    /** RFC 7638 SHA-256 thumbprint of a response-encryption public JWK, for {@code OpenID4VPHandover}'s
+     * {@code jwkThumbprint} element — see {@link SessionTranscript}. */
+    private static byte[] computeThumbprint(JsonNode publicJwk) {
+        try {
+            return com.nimbusds.jose.jwk.JWK.parse(publicJwk.toString()).computeThumbprint().decode();
+        } catch (ParseException | JOSEException e) {
+            throw new MdocVerificationException("response-encryption public JWK is not a valid JWK", e);
         }
     }
 

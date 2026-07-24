@@ -16,7 +16,6 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.OctetKeyPair;
 import com.nimbusds.jose.jwk.RSAKey;
 
-import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.List;
 import java.util.Optional;
@@ -67,21 +66,32 @@ public final class ResponseDecryptor {
     }
 
     /**
-     * The Wallet-generated nonce mdoc's {@code OID4VPHandover} requires (ISO 18013-7 Annex B / OpenID4VP's
-     * mdoc appendix) — carried in the encrypted response JWE's {@code apu} header (RFC 7518 §4.6.1.2,
-     * base64url), the only channel it has back to the Verifier since it has to be known before the
-     * response is even decrypted. Reads the header only — no key/decryption needed. Empty for a
-     * non-encrypted response, or one with no {@code apu} (i.e. every non-mdoc presentation).
+     * The public half of the response-encryption key this JWE was actually encrypted to — mdoc's
+     * {@code OpenID4VPHandover} hashes its RFC 7638 thumbprint (OpenID4VP 1.1 §"Handover and
+     * SessionTranscript Definitions"), computed independently by both sides from a key they each already
+     * hold, rather than a value either side has to invent and communicate. Resolves the same key
+     * {@link #decrypt} would select (by JWE {@code kid} header, falling back to the sole candidate key),
+     * but only needs the private JWK Set to look it up — no decryption performed here.
      */
-    public static Optional<String> extractMdocGeneratedNonce(String jwe) {
+    public static Optional<JsonNode> resolveResponseEncryptionPublicJwk(String jwe, JsonNode privateJwksJson) {
         JWEObject jweObject;
         try {
             jweObject = JWEObject.parse(jwe);
         } catch (ParseException e) {
             throw new Oid4vpException(Oid4vpErrorCode.INVALID_REQUEST, "\"response\" is not a valid JWE", e);
         }
-        var apu = jweObject.getHeader().getAgreementPartyUInfo();
-        return apu == null ? Optional.empty() : Optional.of(new String(apu.decode(), StandardCharsets.UTF_8));
+        JWKSet jwkSet;
+        try {
+            jwkSet = JWKSet.parse(privateJwksJson.toString());
+        } catch (ParseException e) {
+            throw new IllegalStateException("configured response decryption JWK Set is not valid JSON", e);
+        }
+        JWK key = selectKey(jwkSet, jweObject.getHeader().getKeyID());
+        try {
+            return Optional.of(MAPPER.readTree(key.toPublicJWK().toJSONString()));
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to serialize the response decryption key's public half", e);
+        }
     }
 
     private static JWK selectKey(JWKSet jwkSet, String kid) {

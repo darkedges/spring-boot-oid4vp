@@ -16,12 +16,9 @@ import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.OctetKeyPair;
 import com.nimbusds.jose.jwk.RSAKey;
-import com.nimbusds.jose.util.Base64URL;
 
-import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Builds an encrypted Authorization Response ({@code direct_post.jwt} / {@code dc_api.jwt}): an unsigned
@@ -40,12 +37,8 @@ public final class ResponseEncryptor {
      *                               is expected, per HAIP's "fresh ephemeral key per request" convention.
      * @param encValuesSupported     the Verifier's {@code encrypted_response_enc_values_supported}, in
      *                               preference order; defaults to {@code ["A128GCM"]} when empty, per spec.
-     * @param mdocGeneratedNonce     carried in the JWE {@code apu} header (RFC 7518 §4.6.1.2) — the only
-     *                               channel mdoc's {@code SessionTranscript} nonce has back to the Verifier;
-     *                               empty for a presentation that doesn't need one.
      */
-    public static String encrypt(
-            JsonNode payload, JsonNode publicJwksJson, List<String> encValuesSupported, Optional<String> mdocGeneratedNonce) {
+    public static String encrypt(JsonNode payload, JsonNode publicJwksJson, List<String> encValuesSupported) {
         JWKSet jwkSet;
         try {
             jwkSet = JWKSet.parse(publicJwksJson.toString());
@@ -64,8 +57,6 @@ public final class ResponseEncryptor {
         if (key.getKeyID() != null) {
             headerBuilder.keyID(key.getKeyID());
         }
-        mdocGeneratedNonce.ifPresent(nonce ->
-                headerBuilder.agreementPartyUInfo(Base64URL.encode(nonce.getBytes(StandardCharsets.UTF_8))));
 
         JWEObject jwe = new JWEObject(headerBuilder.build(), new Payload(payload.toString()));
         try {

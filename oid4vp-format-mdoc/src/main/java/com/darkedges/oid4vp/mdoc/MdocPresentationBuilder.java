@@ -9,12 +9,16 @@ import co.nstant.in.cbor.model.UnsignedInteger;
 import com.darkedges.oid4vp.core.dcql.ClaimsQuery;
 import com.darkedges.oid4vp.core.dcql.PathComponent;
 import com.darkedges.oid4vp.core.dcql.eval.ClaimSelection;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.nimbusds.jose.JOSEException;
 
 import java.security.PrivateKey;
+import java.text.ParseException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -35,7 +39,7 @@ public final class MdocPresentationBuilder {
             String clientId,
             String responseUri,
             String nonce,
-            String mdocGeneratedNonce) {
+            Optional<JsonNode> responseEncryptionPublicJwk) {
         Map presentedNameSpaces = selectDisclosedItems(credential, claimSelection);
 
         Map issuerSigned = new Map();
@@ -43,7 +47,8 @@ public final class MdocPresentationBuilder {
         issuerSigned.put(new UnicodeString("issuerAuth"), credential.issuerAuth());
 
         DataItem deviceNameSpacesBytes = MdocIssuer.wrapTag24(new Map());
-        byte[] sessionTranscript = SessionTranscript.build(clientId, responseUri, nonce, mdocGeneratedNonce);
+        Optional<byte[]> jwkThumbprint = responseEncryptionPublicJwk.map(MdocPresentationBuilder::computeThumbprint);
+        byte[] sessionTranscript = SessionTranscript.build(clientId, nonce, jwkThumbprint, responseUri);
         byte[] deviceAuthentication = CborUtil.encode(new CborBuilder()
                 .addArray()
                 .add("DeviceAuthentication")
@@ -74,6 +79,16 @@ public final class MdocPresentationBuilder {
         deviceResponse.put(new UnicodeString("status"), new UnsignedInteger(0));
 
         return Base64.getUrlEncoder().withoutPadding().encodeToString(CborUtil.encode(deviceResponse));
+    }
+
+    /** RFC 7638 SHA-256 thumbprint of a response-encryption public JWK, for {@code OpenID4VPHandover}'s
+     * {@code jwkThumbprint} element — see {@link SessionTranscript}. */
+    private static byte[] computeThumbprint(JsonNode publicJwk) {
+        try {
+            return com.nimbusds.jose.jwk.JWK.parse(publicJwk.toString()).computeThumbprint().decode();
+        } catch (ParseException | JOSEException e) {
+            throw new IllegalArgumentException("Verifier's response-encryption public JWK is not a valid JWK", e);
+        }
     }
 
     private static Map selectDisclosedItems(MdocHeldCredential credential, ClaimSelection claimSelection) {

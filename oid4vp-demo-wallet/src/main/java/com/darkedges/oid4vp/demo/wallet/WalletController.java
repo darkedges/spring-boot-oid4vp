@@ -39,9 +39,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.PrivateKey;
-import java.security.SecureRandom;
 import java.time.Clock;
-import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 
@@ -50,15 +48,13 @@ import java.util.Optional;
  * can resolve it), and, on request, fetch an Authorization Request from a Verifier, evaluate it against
  * the local credential store, and POST the resulting {@code vp_token} to the Verifier's
  * {@code response_uri} — the same {@link WalletAuthorizationResponseBuilder} orchestration a real Wallet
- * would use, just triggered over HTTP instead of from a UI. For a {@code direct_post.jwt} registration
- * (required for mdoc, since {@code SessionTranscript} needs a {@code mdocGeneratedNonce} with nowhere else
- * to travel back to the Verifier), encrypts the response instead of posting it in the clear.
+ * would use, just triggered over HTTP instead of from a UI. For a {@code direct_post.jwt} registration,
+ * encrypts the response instead of posting it in the clear.
  */
 @RestController
 public class WalletController {
 
     private static final Logger log = LoggerFactory.getLogger(WalletController.class);
-    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final ECKey issuerKey;
     private final ECKey holderKey;
@@ -105,7 +101,10 @@ public class WalletController {
 
         String responseMode = request.hasNonNull("response_mode") ? request.get("response_mode").asText() : "direct_post";
         boolean encryptedResponse = responseMode.endsWith(".jwt");
-        Optional<String> mdocGeneratedNonce = encryptedResponse ? Optional.of(randomNonce()) : Optional.empty();
+        ClientMetadata clientMetadata = encryptedResponse ? ClientMetadataReader.read(request.get("client_metadata")) : null;
+        Optional<JsonNode> responseEncryptionPublicJwk = encryptedResponse
+                ? Optional.of(resolveResponseEncryptionPublicJwk(clientMetadata))
+                : Optional.empty();
 
         WalletAuthorizationResponseBuilder builder = new WalletAuthorizationResponseBuilder(Map.of(
                 CredentialFormat.DC_SD_JWT, (PresentationBuilder) new SdJwtVcPresentationBuilderAdapter(),
@@ -128,7 +127,8 @@ public class WalletController {
 
         WalletAuthorizationResponseResult result = builder.build(
                 dcqlQuery, credentialStore,
-                new PresentationBuildParams(nonce, audience, clientId, responseUri, mdocGeneratedNonce, holderKeyResolver, Clock.systemUTC()));
+                new PresentationBuildParams(
+                        nonce, audience, clientId, responseUri, responseEncryptionPublicJwk, holderKeyResolver, Clock.systemUTC()));
 
         if (result instanceof WalletAuthorizationResponseResult.Declined declined) {
             log.warn("Declining: {}", declined.reason());
@@ -141,8 +141,7 @@ public class WalletController {
         log.info("Posting vp_token to {}", responseUri);
 
         String formBody = encryptedResponse
-                ? "response=" + URLEncoder.encode(
-                        buildEncryptedResponse(request, vpTokenJson, state, mdocGeneratedNonce), StandardCharsets.UTF_8)
+                ? "response=" + URLEncoder.encode(buildEncryptedResponse(clientMetadata, vpTokenJson, state), StandardCharsets.UTF_8)
                 : "vp_token=" + URLEncoder.encode(vpTokenJson, StandardCharsets.UTF_8)
                         + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
 
@@ -157,9 +156,7 @@ public class WalletController {
         return ResponseEntity.ok(verifierResponse);
     }
 
-    private String buildEncryptedResponse(
-            JsonNode request, String vpTokenJson, String state, Optional<String> mdocGeneratedNonce) throws Exception {
-        ClientMetadata clientMetadata = ClientMetadataReader.read(request.get("client_metadata"));
+    private String buildEncryptedResponse(ClientMetadata clientMetadata, String vpTokenJson, String state) throws Exception {
         JsonNode jwks = clientMetadata.jwks()
                 .orElseThrow(() -> new IllegalStateException("direct_post.jwt requires client_metadata.jwks"));
 
@@ -167,13 +164,17 @@ public class WalletController {
         payload.set("vp_token", mapper.readTree(vpTokenJson));
         payload.put("state", state);
 
-        return ResponseEncryptor.encrypt(payload, jwks, clientMetadata.encryptedResponseEncValuesSupportedOrDefault(), mdocGeneratedNonce);
+        return ResponseEncryptor.encrypt(payload, jwks, clientMetadata.encryptedResponseEncValuesSupportedOrDefault());
     }
 
-    private static String randomNonce() {
-        byte[] bytes = new byte[16];
-        RANDOM.nextBytes(bytes);
-        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+    private JsonNode resolveResponseEncryptionPublicJwk(ClientMetadata clientMetadata) {
+        JsonNode jwks = clientMetadata.jwks()
+                .orElseThrow(() -> new IllegalStateException("direct_post.jwt requires client_metadata.jwks"));
+        JsonNode keys = jwks.get("keys");
+        if (keys == null || !keys.isArray() || keys.isEmpty()) {
+            throw new IllegalStateException("client_metadata.jwks has no keys");
+        }
+        return keys.get(0);
     }
 
     public record PresentRequest(String verifierAuthorizeUrl) {}

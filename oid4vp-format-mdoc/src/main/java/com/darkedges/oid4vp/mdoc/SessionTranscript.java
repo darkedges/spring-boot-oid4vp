@@ -1,54 +1,53 @@
 package com.darkedges.oid4vp.mdoc;
 
 import co.nstant.in.cbor.CborBuilder;
+import co.nstant.in.cbor.model.ByteString;
+import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.SimpleValue;
 
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Optional;
 
 /**
  * Builds the CBOR-encoded {@code SessionTranscript} mdoc's {@code DeviceAuth} is computed over, per
- * OpenID4VP's {@code OID4VPHandover} (ISO 18013-7 Annex B): binds the presentation to this specific
- * Authorization Request rather than mdoc's native proximity/QR-code flow (hence the two leading
- * {@code null}s, where a proximity {@code DeviceEngagementBytes}/{@code EReaderKeyBytes} pair would go).
+ * OpenID4VP 1.1 §"Handover and SessionTranscript Definitions" > "Invocation via Redirects" (the
+ * {@code OpenID4VPHandover} variant; the Digital Credentials API has a separate, unimplemented
+ * {@code OpenID4VPDCAPIHandover} using {@code origin} instead of {@code clientId}/{@code responseUri}):
  * <pre>
- * SessionTranscript = [ null, null, OID4VPHandover ]
- * OID4VPHandover     = [ clientIdHash, responseUriHash, nonce ]
- * clientIdHash        = SHA-256(CBOR([client_id, mdocGeneratedNonce]))
- * responseUriHash     = SHA-256(CBOR([response_uri, mdocGeneratedNonce]))
+ * SessionTranscript = [ null, null, OpenID4VPHandover ]
+ * OpenID4VPHandover = [ "OpenID4VPHandover", sha256(CBOR(OpenID4VPHandoverInfo)) ]
+ * OpenID4VPHandoverInfo = [ clientId, nonce, jwkThumbprint, responseUri ]
  * </pre>
- * {@code mdocGeneratedNonce} is Wallet-generated and carried back to the Verifier via the encrypted
- * response's JWE {@code apu} header (see {@code ResponseDecryptor.extractMdocGeneratedNonce}) — it has no
- * other channel, since the Verifier needs it before it can even attempt this reconstruction.
+ * {@code jwkThumbprint} is the RFC 7638 SHA-256 thumbprint of the Verifier's response-encryption public
+ * key (the same key {@code client_metadata.jwks} carries) when the response is encrypted, else CBOR
+ * {@code null} — both sides derive it independently from a key they already have, unlike an earlier draft
+ * of this handover that required the Wallet to invent and communicate a nonce back to the Verifier.
  */
 final class SessionTranscript {
 
     private SessionTranscript() {}
 
-    static byte[] build(String clientId, String responseUri, String nonce, String mdocGeneratedNonce) {
-        byte[] clientIdHash = sha256(encodePair(clientId, mdocGeneratedNonce));
-        byte[] responseUriHash = sha256(encodePair(responseUri, mdocGeneratedNonce));
-
-        return CborUtil.encode(new CborBuilder()
+    static byte[] build(String clientId, String nonce, Optional<byte[]> jwkThumbprint, String responseUri) {
+        DataItem thumbprintItem = jwkThumbprint.<DataItem>map(ByteString::new).orElse(SimpleValue.NULL);
+        byte[] handoverInfo = CborUtil.encode(new CborBuilder()
                 .addArray()
-                .add(SimpleValue.NULL)
-                .add(SimpleValue.NULL)
-                .addArray()
-                .add(clientIdHash)
-                .add(responseUriHash)
+                .add(clientId)
                 .add(nonce)
-                .end()
+                .add(thumbprintItem)
+                .add(responseUri)
                 .end()
                 .build()
                 .get(0));
-    }
 
-    private static byte[] encodePair(String value, String mdocGeneratedNonce) {
         return CborUtil.encode(new CborBuilder()
                 .addArray()
-                .add(value)
-                .add(mdocGeneratedNonce)
+                .add(SimpleValue.NULL)
+                .add(SimpleValue.NULL)
+                .addArray()
+                .add("OpenID4VPHandover")
+                .add(sha256(handoverInfo))
+                .end()
                 .end()
                 .build()
                 .get(0));

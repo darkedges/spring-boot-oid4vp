@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.core.response;
 
 import com.darkedges.oid4vp.core.dcql.CredentialQuery;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Clock;
 import java.util.Optional;
@@ -16,16 +17,17 @@ import java.util.Optional;
  *                         Credentials API) the presentation must be bound to.
  * @param clientId         the Verifier's own raw {@code client_id}, exactly as sent in the Authorization
  *                         Request. Distinct from {@code expectedAudience}: for most formats/schemes they
- *                         happen to be the same string, but mdoc's {@code OID4VPHandover} hashes the
+ *                         happen to be the same string, but mdoc's {@code OpenID4VPHandover} hashes the
  *                         literal {@code client_id}, not whatever derived value a Wallet binds its
  *                         response audience to (e.g. {@code x509_hash:...} for {@code x509_san_dns}).
  * @param responseUri      the Authorization Request's {@code response_uri} — also hashed into mdoc's
- *                         {@code OID4VPHandover}.
- * @param mdocGeneratedNonce the Wallet-generated nonce mdoc's {@code OID4VPHandover} requires, carried
- *                           back from the encrypted response's JWE {@code apu} header (there is no other
- *                           channel for it) — empty for non-mdoc presentations, or for any response mode
- *                           that isn't encrypted (mdoc presentations require {@code direct_post.jwt}/
- *                           {@code dc_api.jwt} in practice, since this nonce has nowhere else to travel).
+ *                         {@code OpenID4VPHandover}.
+ * @param responseEncryptionPublicJwk the public JWK (as raw JSON, kept crypto-library-agnostic like
+ *                         {@link IssuerKeyResolver}'s return type) of the response-encryption key this
+ *                         response was actually encrypted to — mdoc's {@code OpenID4VPHandover} hashes its
+ *                         RFC 7638 thumbprint (both sides derive it independently from a key they already
+ *                         have; per spec, {@code null} when the response is unencrypted). Empty for
+ *                         non-mdoc presentations or unencrypted responses.
  * @param issuerKeyResolver resolves the issuer's public key.
  * @param clock            injectable clock, so expiry checks are reproducible in tests.
  */
@@ -35,7 +37,7 @@ public record PresentationVerificationParams(
         String expectedAudience,
         String clientId,
         String responseUri,
-        Optional<String> mdocGeneratedNonce,
+        Optional<JsonNode> responseEncryptionPublicJwk,
         IssuerKeyResolver issuerKeyResolver,
         Clock clock) {
 
@@ -45,7 +47,7 @@ public record PresentationVerificationParams(
             throw new IllegalArgumentException(
                     "query, expectedNonce, expectedAudience, clientId, responseUri, and issuerKeyResolver are required");
         }
-        mdocGeneratedNonce = mdocGeneratedNonce == null ? Optional.empty() : mdocGeneratedNonce;
+        responseEncryptionPublicJwk = responseEncryptionPublicJwk == null ? Optional.empty() : responseEncryptionPublicJwk;
         clock = clock == null ? Clock.systemUTC() : clock;
     }
 }

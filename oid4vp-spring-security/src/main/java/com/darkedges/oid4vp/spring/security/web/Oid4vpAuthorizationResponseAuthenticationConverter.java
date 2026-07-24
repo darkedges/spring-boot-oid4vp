@@ -46,16 +46,18 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
         String error;
         String errorDescription;
         String vpTokenJson;
-        String mdocGeneratedNonce = null;
+        String responseEncryptionPublicJwkJson = null;
 
         String responseJwe = request.getParameter("response");
         if (responseJwe != null) {
-            JsonNode decrypted = decryptResponse(request, responseJwe);
+            JsonNode privateJwks = resolvePrivateJwks(request);
+            JsonNode decrypted = ResponseDecryptor.decrypt(responseJwe, privateJwks);
             state = decrypted.path("state").asText(null);
             error = decrypted.hasNonNull("error") ? decrypted.get("error").asText() : null;
             errorDescription = decrypted.hasNonNull("error_description") ? decrypted.get("error_description").asText() : null;
             vpTokenJson = decrypted.has("vp_token") ? decrypted.get("vp_token").toString() : null;
-            mdocGeneratedNonce = ResponseDecryptor.extractMdocGeneratedNonce(responseJwe).orElse(null);
+            responseEncryptionPublicJwkJson = ResponseDecryptor.resolveResponseEncryptionPublicJwk(responseJwe, privateJwks)
+                    .map(JsonNode::toString).orElse(null);
         } else {
             state = request.getParameter("state");
             error = request.getParameter("error");
@@ -79,19 +81,18 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"vp_token\" parameter");
         }
 
-        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson, null, mdocGeneratedNonce);
+        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson, null, responseEncryptionPublicJwkJson);
     }
 
-    private JsonNode decryptResponse(HttpServletRequest request, String responseJwe) {
+    private JsonNode resolvePrivateJwks(HttpServletRequest request) {
         if (decryptionKeyResolver == null || requestMatcher == null) {
             throw new Oid4vpAuthenticationException(
                     Oid4vpErrorCode.INVALID_REQUEST, "encrypted responses (direct_post.jwt) are not configured");
         }
         String registrationId = extractRegistrationId(request);
-        JsonNode privateJwks = decryptionKeyResolver.resolvePrivateJwks(registrationId)
+        return decryptionKeyResolver.resolvePrivateJwks(registrationId)
                 .orElseThrow(() -> new Oid4vpAuthenticationException(
                         Oid4vpErrorCode.INVALID_REQUEST, "no response decryption key configured for registration: " + registrationId));
-        return ResponseDecryptor.decrypt(responseJwe, privateJwks);
     }
 
     private String extractRegistrationId(HttpServletRequest request) {

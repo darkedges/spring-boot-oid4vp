@@ -25,15 +25,12 @@ public final class MdocPresentationBuilderAdapter implements PresentationBuilder
                     "MdocPresentationBuilderAdapter requires a MdocHeldCredential, was: " + credential.getClass());
         }
 
-        String mdocGeneratedNonce = params.mdocGeneratedNonce().orElseThrow(() -> new IllegalStateException(
-                "mdoc presentations require an encrypted response (direct_post.jwt) so DeviceAuth can bind "
-                        + "to a mdocGeneratedNonce carried in the response JWE's apu header"));
         PrivateKey devicePrivateKey = params.holderKeyResolver().resolvePrivateKey(mdocHeldCredential)
                 .orElseThrow(() -> new IllegalStateException("no device private key available for this mdoc credential"));
 
         String presentation = MdocPresentationBuilder.build(
                 mdocHeldCredential, plan.claimSelection(), devicePrivateKey,
-                params.clientId(), params.responseUri(), params.nonce(), mdocGeneratedNonce);
+                params.clientId(), params.responseUri(), params.nonce(), params.responseEncryptionPublicJwk());
         return new PresentationEntry.StringPresentation(presentation);
     }
 }

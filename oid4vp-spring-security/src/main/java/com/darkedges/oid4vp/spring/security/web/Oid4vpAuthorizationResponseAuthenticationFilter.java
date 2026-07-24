@@ -4,6 +4,8 @@ import com.darkedges.oid4vp.core.response.Oid4vpErrorCode;
 import com.darkedges.oid4vp.spring.security.authentication.Oid4vpAuthenticationException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.core.Authentication;
@@ -22,6 +24,8 @@ import org.springframework.security.web.util.matcher.RequestMatcher;
  */
 public class Oid4vpAuthorizationResponseAuthenticationFilter extends AbstractAuthenticationProcessingFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(Oid4vpAuthorizationResponseAuthenticationFilter.class);
+
     public static final String DEFAULT_RESPONSE_URI_PATTERN = "/login/oid4vp/direct-post/{registrationId}";
     public static final String DEFAULT_DC_API_RESPONSE_URI_PATTERN = "/login/oid4vp/dc-api/{registrationId}";
 
@@ -38,6 +42,7 @@ public class Oid4vpAuthorizationResponseAuthenticationFilter extends AbstractAut
             Oid4vpErrorCode code = exception instanceof Oid4vpAuthenticationException oid4vpEx
                     ? oid4vpEx.errorCode()
                     : Oid4vpErrorCode.ACCESS_DENIED;
+            log.warn("Authorization Response rejected ({}): {}", code.value(), exception.getMessage(), exception);
             writeJson(response, HttpServletResponse.SC_BAD_REQUEST, "{\"error\":\"" + code.value() + "\"}");
         });
     }

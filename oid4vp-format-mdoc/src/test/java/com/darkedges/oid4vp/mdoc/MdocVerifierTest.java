@@ -40,18 +40,19 @@ class MdocVerifierTest {
     private static final String CLIENT_ID = "x509_hash:test-client";
     private static final String RESPONSE_URI = "https://verifier.example.org/response";
     private static final String NONCE = "test-nonce";
-    private static final String MDOC_GENERATED_NONCE = "test-mdoc-generated-nonce";
 
     @Test
     void verifiesAWellFormedDeviceResponse() throws Exception {
         KeyPair issuerKeys = TestMdocFixtures.generateEcKeyPair();
         KeyPair deviceKeys = TestMdocFixtures.generateEcKeyPair();
+        JsonNode encryptionJwk = TestMdocFixtures.publicJwk(TestMdocFixtures.generateEcKeyPair().getPublic());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
-        String presentation = buildDeviceResponse(issuerKeys, deviceKeys, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
+        String presentation = buildDeviceResponse(
+                issuerKeys, deviceKeys, encryptionJwk, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
 
         VerifiedPresentation result = new MdocVerifier().verify(
-                new PresentationEntry.StringPresentation(presentation), params(issuerKeys, now));
+                new PresentationEntry.StringPresentation(presentation), params(issuerKeys, encryptionJwk, now));
 
         assertThat(result.format()).isEqualTo(CredentialFormat.MSO_MDOC);
         assertThat(result.holderKeyConfirmed()).isPresent();
@@ -64,13 +65,15 @@ class MdocVerifierTest {
     void rejectsATamperedElementValue() throws Exception {
         KeyPair issuerKeys = TestMdocFixtures.generateEcKeyPair();
         KeyPair deviceKeys = TestMdocFixtures.generateEcKeyPair();
+        JsonNode encryptionJwk = TestMdocFixtures.publicJwk(TestMdocFixtures.generateEcKeyPair().getPublic());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
         // Build normally, then splice in a different elementValue for "given_name" without touching its
         // digest -- exactly what a tampered disclosure looks like. Same byte length as the original ("Jean"
         // -> "Anne") so the CBOR length-prefix stays valid and this genuinely exercises the digest check,
         // rather than just failing to parse at all.
-        String presentation = buildDeviceResponse(issuerKeys, deviceKeys, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
+        String presentation = buildDeviceResponse(
+                issuerKeys, deviceKeys, encryptionJwk, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
         byte[] deviceResponseBytes = Base64.getUrlDecoder().decode(presentation);
         String raw = new String(deviceResponseBytes, java.nio.charset.StandardCharsets.ISO_8859_1);
         assertThat(raw).contains("Jean");
@@ -79,7 +82,7 @@ class MdocVerifierTest {
                 .encodeToString(tampered.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
 
         assertThatThrownBy(() -> new MdocVerifier().verify(
-                new PresentationEntry.StringPresentation(tamperedPresentation), params(issuerKeys, now)))
+                new PresentationEntry.StringPresentation(tamperedPresentation), params(issuerKeys, encryptionJwk, now)))
                 .isInstanceOf(MdocVerificationException.class)
                 .hasMessageContaining("digest mismatch");
     }
@@ -88,9 +91,11 @@ class MdocVerifierTest {
     void rejectsWhenTheSessionTranscriptDoesNotMatch() throws Exception {
         KeyPair issuerKeys = TestMdocFixtures.generateEcKeyPair();
         KeyPair deviceKeys = TestMdocFixtures.generateEcKeyPair();
+        JsonNode encryptionJwk = TestMdocFixtures.publicJwk(TestMdocFixtures.generateEcKeyPair().getPublic());
         Instant now = Instant.parse("2026-01-01T00:00:00Z");
 
-        String presentation = buildDeviceResponse(issuerKeys, deviceKeys, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
+        String presentation = buildDeviceResponse(
+                issuerKeys, deviceKeys, encryptionJwk, now, java.util.Map.of("given_name", "Jean", "family_name", "Dupont"));
 
         CredentialQuery query = CredentialQuery.builder("mdl", CredentialFormat.MSO_MDOC)
                 .meta(new MsoMdocMeta(DOC_TYPE))
@@ -100,7 +105,7 @@ class MdocVerifierTest {
         // A different nonce means the Verifier reconstructs a different SessionTranscript than the one the
         // "Wallet" actually signed DeviceAuthentication over -- DeviceAuth verification must fail.
         PresentationVerificationParams wrongNonceParams = new PresentationVerificationParams(
-                query, "a-different-nonce", CLIENT_ID, CLIENT_ID, RESPONSE_URI, Optional.of(MDOC_GENERATED_NONCE),
+                query, "a-different-nonce", CLIENT_ID, CLIENT_ID, RESPONSE_URI, Optional.of(encryptionJwk),
                 issuerKeyResolver, Clock.fixed(now, ZoneOffset.UTC));
 
         assertThatThrownBy(() -> new MdocVerifier().verify(new PresentationEntry.StringPresentation(presentation), wrongNonceParams))
@@ -108,25 +113,27 @@ class MdocVerifierTest {
                 .hasMessageContaining("COSE_Sign1 signature verification failed");
     }
 
-    private static PresentationVerificationParams params(KeyPair issuerKeys, Instant now) {
+    private static PresentationVerificationParams params(KeyPair issuerKeys, JsonNode encryptionJwk, Instant now) {
         CredentialQuery query = CredentialQuery.builder("mdl", CredentialFormat.MSO_MDOC)
                 .meta(new MsoMdocMeta(DOC_TYPE))
                 .build();
         IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) ->
                 Optional.of(TestMdocFixtures.publicJwk(issuerKeys.getPublic()));
         return new PresentationVerificationParams(
-                query, NONCE, CLIENT_ID, CLIENT_ID, RESPONSE_URI, Optional.of(MDOC_GENERATED_NONCE),
+                query, NONCE, CLIENT_ID, CLIENT_ID, RESPONSE_URI, Optional.of(encryptionJwk),
                 issuerKeyResolver, Clock.fixed(now, ZoneOffset.UTC));
     }
 
     private static String buildDeviceResponse(
-            KeyPair issuerKeys, KeyPair deviceKeys, Instant now, java.util.Map<String, String> claims) throws Exception {
+            KeyPair issuerKeys, KeyPair deviceKeys, JsonNode encryptionJwk, Instant now, java.util.Map<String, String> claims)
+            throws Exception {
         byte[] issuerSignedBytes = TestMdocFixtures.buildIssuerSigned(
                 issuerKeys, (ECPublicKey) deviceKeys.getPublic(), now, DOC_TYPE, NAMESPACE, claims);
         DataItem issuerSigned = CborUtil.decodeSingle(issuerSignedBytes);
 
         DataItem deviceNameSpacesBytes = TestMdocFixtures.wrapTag24(new Map());
-        byte[] sessionTranscript = SessionTranscript.build(CLIENT_ID, RESPONSE_URI, NONCE, MDOC_GENERATED_NONCE);
+        byte[] jwkThumbprint = com.nimbusds.jose.jwk.JWK.parse(encryptionJwk.toString()).computeThumbprint().decode();
+        byte[] sessionTranscript = SessionTranscript.build(CLIENT_ID, NONCE, Optional.of(jwkThumbprint), RESPONSE_URI);
         byte[] deviceAuthentication = CborUtil.encode(new CborBuilder()
                 .addArray()
                 .add("DeviceAuthentication")
