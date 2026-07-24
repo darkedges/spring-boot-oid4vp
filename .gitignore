@@ -8,3 +8,6 @@ target/
 .vscode/
 *.log
 .env.sh
+
+# Conformance-suite test-plan configs embed real (throwaway) private key material.
+conformance/*.json
