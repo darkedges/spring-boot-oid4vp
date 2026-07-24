@@ -24,6 +24,12 @@
     <assertj.version>3.27.6</assertj.version>
     <snakeyaml.version>2.5</snakeyaml.version>
     <cbor.version>0.9</cbor.version>
+    <!-- Overrides the version the spring-boot.version BOM above otherwise pulls in (2.21.4), which is
+         vulnerable to CVE-2026-54515 (jackson-databind: @JsonFormat(ACCEPT_CASE_INSENSITIVE_PROPERTIES)
+         silently reopens fields excluded by @JsonIgnoreProperties, a mass-assignment risk), fixed in
+         2.21.5. Bump (or drop) this once a spring-boot.version upgrade brings in a BOM that already
+         manages a fixed version on its own. -->
+    <jackson-databind.version>2.21.5</jackson-databind.version>
   </properties>
 
   <modules>
@@ -42,6 +48,13 @@
 
   <dependencyManagement>
     <dependencies>
+      <!-- Declared before the spring-boot-dependencies import so it wins over the 2.21.4 that BOM
+           otherwise manages; see the jackson-databind.version property comment above. -->
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson-databind.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
