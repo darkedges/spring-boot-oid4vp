@@ -144,6 +144,7 @@ final class CoseSign1 {
         return payload;
     }
 
+
     /** The signing certificate chain from the {@code x5chain} header (RFC 9360) — checked in the
      * protected header first, then unprotected — leaf-first, base64 (standard, not URL-safe) DER, the
      * same shape {@link com.darkedges.oid4vp.core.response.IssuerKeyResolver}'s {@code certificateChain}

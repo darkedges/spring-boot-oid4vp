@@ -164,8 +164,12 @@ public final class MdocVerifier implements PresentationVerifier {
                 .end()
                 .build()
                 .get(0));
+        // DeviceSignature is computed over DeviceAuthenticationBytes = #6.24(bstr .cbor DeviceAuthentication)
+        // (ISO 18013-5 §9.1.3.4) -- the tag-24-wrapped encoding, the same "encoded CBOR" convention IssuerAuth
+        // uses for MobileSecurityObjectBytes, not the raw DeviceAuthentication array bytes directly.
+        byte[] deviceAuthenticationBytes = CborUtil.encode(MdocIssuer.wrapTag24(CborUtil.decodeSingle(deviceAuthentication)));
 
-        CoseSign1.parse(deviceSignatureItem).verifyDetached(mso.deviceKey(), deviceAuthentication, "DeviceAuth");
+        CoseSign1.parse(deviceSignatureItem).verifyDetached(mso.deviceKey(), deviceAuthenticationBytes, "DeviceAuth");
     }
 
     private static MessageDigest digestFor(String digestAlgorithm) {

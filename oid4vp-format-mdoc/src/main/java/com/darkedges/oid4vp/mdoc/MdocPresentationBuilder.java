@@ -58,7 +58,10 @@ public final class MdocPresentationBuilder {
                 .end()
                 .build()
                 .get(0));
-        DataItem deviceSignature = CoseSign1.sign1(devicePrivateKey, List.of(), null, deviceAuthentication);
+        // DeviceSignature is computed over DeviceAuthenticationBytes = #6.24(bstr .cbor DeviceAuthentication)
+        // (ISO 18013-5 §9.1.3.4) -- see MdocVerifier.verifyDeviceAuth for the matching Verifier-side comment.
+        byte[] deviceAuthenticationBytes = CborUtil.encode(MdocIssuer.wrapTag24(CborUtil.decodeSingle(deviceAuthentication)));
+        DataItem deviceSignature = CoseSign1.sign1(devicePrivateKey, List.of(), null, deviceAuthenticationBytes);
 
         Map deviceAuth = new Map();
         deviceAuth.put(new UnicodeString("deviceSignature"), deviceSignature);

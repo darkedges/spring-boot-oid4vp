@@ -143,8 +143,9 @@ class MdocVerifierTest {
                 .end()
                 .build()
                 .get(0));
+        byte[] deviceAuthenticationBytes = CborUtil.encode(TestMdocFixtures.wrapTag24(CborUtil.decodeSingle(deviceAuthentication)));
         byte[] deviceSignatureCose = TestMdocFixtures.coseSign1(
-                deviceKeys.getPrivate(), CborUtil.encode(TestMdocFixtures.algHeader()), deviceAuthentication, null);
+                deviceKeys.getPrivate(), CborUtil.encode(TestMdocFixtures.algHeader()), deviceAuthenticationBytes, null);
 
         Map deviceAuth = new Map();
         deviceAuth.put(new UnicodeString("deviceSignature"), CborUtil.decodeSingle(deviceSignatureCose));
