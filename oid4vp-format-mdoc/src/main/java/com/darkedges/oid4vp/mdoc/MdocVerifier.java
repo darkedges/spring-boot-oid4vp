@@ -144,7 +144,7 @@ public final class MdocVerifier implements PresentationVerifier {
 
     private void verifyDeviceAuth(Map document, String docType, MobileSecurityObject mso, PresentationVerificationParams params) {
         Optional<byte[]> jwkThumbprint = params.responseEncryptionPublicJwk().map(MdocVerifier::computeThumbprint);
-        byte[] sessionTranscript = SessionTranscript.build(
+        DataItem sessionTranscript = SessionTranscript.buildDataItem(
                 params.clientId(), params.expectedNonce(), jwkThumbprint, params.responseUri());
 
         Map deviceSigned = CborUtil.requireMap(CborUtil.get(document, "deviceSigned"));
@@ -158,7 +158,7 @@ public final class MdocVerifier implements PresentationVerifier {
         byte[] deviceAuthentication = CborUtil.encode(new co.nstant.in.cbor.CborBuilder()
                 .addArray()
                 .add("DeviceAuthentication")
-                .add(CborUtil.decodeSingle(sessionTranscript))
+                .add(sessionTranscript)
                 .add(docType)
                 .add(deviceNameSpacesBytes)
                 .end()

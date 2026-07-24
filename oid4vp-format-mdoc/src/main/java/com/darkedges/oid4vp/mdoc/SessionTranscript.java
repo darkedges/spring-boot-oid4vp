@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.mdoc;
 
 import co.nstant.in.cbor.CborBuilder;
+import co.nstant.in.cbor.model.Array;
 import co.nstant.in.cbor.model.ByteString;
 import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.SimpleValue;
@@ -29,6 +30,14 @@ final class SessionTranscript {
     private SessionTranscript() {}
 
     static byte[] build(String clientId, String nonce, Optional<byte[]> jwkThumbprint, String responseUri) {
+        return CborUtil.encode(buildDataItem(clientId, nonce, jwkThumbprint, responseUri));
+    }
+
+    /** Same as {@link #build}, but returns the {@link DataItem} directly rather than its encoded bytes --
+     * for callers (both {@code MdocVerifier} and {@code MdocPresentationBuilder}) that only need it to
+     * immediately embed as a nested element of a larger CBOR structure being built, sparing them an
+     * encode-then-immediately-decode-back-to-a-DataItem round trip through {@link CborUtil#decodeSingle}. */
+    static DataItem buildDataItem(String clientId, String nonce, Optional<byte[]> jwkThumbprint, String responseUri) {
         DataItem thumbprintItem = jwkThumbprint.<DataItem>map(ByteString::new).orElse(SimpleValue.NULL);
         byte[] handoverInfo = CborUtil.encode(new CborBuilder()
                 .addArray()
@@ -40,17 +49,14 @@ final class SessionTranscript {
                 .build()
                 .get(0));
 
-        return CborUtil.encode(new CborBuilder()
-                .addArray()
-                .add(SimpleValue.NULL)
-                .add(SimpleValue.NULL)
-                .addArray()
-                .add("OpenID4VPHandover")
-                .add(sha256(handoverInfo))
-                .end()
-                .end()
-                .build()
-                .get(0));
+        Array sessionTranscript = new Array();
+        sessionTranscript.add(SimpleValue.NULL);
+        sessionTranscript.add(SimpleValue.NULL);
+        Array openId4VpHandover = new Array();
+        openId4VpHandover.add(new co.nstant.in.cbor.model.UnicodeString("OpenID4VPHandover"));
+        openId4VpHandover.add(new ByteString(sha256(handoverInfo)));
+        sessionTranscript.add(openId4VpHandover);
+        return sessionTranscript;
     }
 
     private static byte[] sha256(byte[] data) {

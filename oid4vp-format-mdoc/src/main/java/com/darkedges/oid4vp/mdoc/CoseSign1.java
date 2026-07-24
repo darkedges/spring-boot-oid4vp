@@ -187,8 +187,15 @@ final class CoseSign1 {
     }
 
     private void verifyOverPayload(PublicKey publicKey, byte[] payloadBytes, String context) {
+        // Required, not merely checked-if-present: the verification below always runs SHA256withECDSA
+        // regardless of what (if anything) the protected header claims, so a missing alg label can never
+        // cause a different algorithm to actually be used here -- but silently accepting it would still
+        // mean an attacker-supplied COSE_Sign1 that never actually commits to ES256 sails through unflagged.
         DataItem algItem = protectedHeader.get(LABEL_ALG);
-        if (algItem != null && !algItem.equals(ALG_ES256)) {
+        if (algItem == null) {
+            throw new MdocVerificationException(context + ": COSE_Sign1 protected header has no \"alg\" label");
+        }
+        if (!algItem.equals(ALG_ES256)) {
             throw new MdocVerificationException(
                     context + ": unsupported COSE algorithm (only ES256 is supported): " + algItem);
         }

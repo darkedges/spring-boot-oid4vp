@@ -3,6 +3,7 @@ package com.darkedges.oid4vp.mdoc;
 import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.Map;
 import co.nstant.in.cbor.model.NegativeInteger;
+import co.nstant.in.cbor.model.UnsignedInteger;
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
@@ -59,6 +60,19 @@ record MobileSecurityObject(
 
     private static ECPublicKey parseCoseKey(Map coseKey) {
         // COSE_Key EC2 labels (RFC 9053 §7.1.1): kty(1)=2 (EC2), crv(-1)=1 (P-256), x(-2), y(-3).
+        // kty/crv are checked explicitly -- not just documented -- before trusting x/y as P-256 coordinates:
+        // this is untrusted Wallet-controlled input, and building an ECPublicKey from x/y bytes that were
+        // never actually asserted to be an EC2/P-256 point (e.g. a COSE_Key for a different curve or key
+        // type reusing labels -2/-3 for something else entirely) is exactly the kind of curve/key-type
+        // confusion that should be rejected up front rather than silently reinterpreted.
+        DataItem kty = coseKey.get(new UnsignedInteger(1));
+        if (!(kty instanceof UnsignedInteger ktyValue) || ktyValue.getValue().intValueExact() != 2) {
+            throw new MdocVerificationException("deviceKeyInfo.deviceKey has unsupported COSE_Key kty (expected 2/EC2): " + kty);
+        }
+        DataItem crv = coseKey.get(new NegativeInteger(-1));
+        if (!(crv instanceof UnsignedInteger crvValue) || crvValue.getValue().intValueExact() != 1) {
+            throw new MdocVerificationException("deviceKeyInfo.deviceKey has unsupported COSE_Key crv (expected 1/P-256): " + crv);
+        }
         byte[] x = CborUtil.requireBytes(coseKey.get(new NegativeInteger(-2)));
         byte[] y = CborUtil.requireBytes(coseKey.get(new NegativeInteger(-3)));
         try {

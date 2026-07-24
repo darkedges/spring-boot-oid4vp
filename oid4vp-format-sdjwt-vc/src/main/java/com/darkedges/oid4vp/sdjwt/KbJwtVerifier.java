@@ -64,11 +64,18 @@ public final class KbJwtVerifier {
                             + expectedSdHash + "\", was \"" + sdHash + "\")");
         }
 
-        Instant iat = claims.getIssueTime() == null ? null : claims.getIssueTime().toInstant();
-        if (iat != null && iat.isAfter(clock.instant().plus(allowedClockSkew))) {
+        // "iat" is a REQUIRED Key Binding JWT claim (SD-JWT VC), not an optional one: it's the only thing
+        // this method checks for freshness/replay, so silently skipping the check when it's absent (as
+        // opposed to rejecting the JWT outright) would let a Key Binding JWT with no "iat" at all bypass
+        // freshness enforcement entirely rather than merely fail an implausible-timestamp check.
+        if (claims.getIssueTime() == null) {
+            throw new SdJwtVerificationException("Key Binding JWT is missing required \"iat\" claim");
+        }
+        Instant iat = claims.getIssueTime().toInstant();
+        if (iat.isAfter(clock.instant().plus(allowedClockSkew))) {
             throw new SdJwtVerificationException("Key Binding JWT iat is too far in the future: " + iat);
         }
-        if (iat != null && iat.isBefore(clock.instant().minus(allowedClockSkew))) {
+        if (iat.isBefore(clock.instant().minus(allowedClockSkew))) {
             throw new SdJwtVerificationException("Key Binding JWT iat is too far in the past: " + iat);
         }
     }

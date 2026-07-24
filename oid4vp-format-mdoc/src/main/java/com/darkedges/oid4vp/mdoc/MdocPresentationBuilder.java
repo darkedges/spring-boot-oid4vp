@@ -48,11 +48,11 @@ public final class MdocPresentationBuilder {
 
         DataItem deviceNameSpacesBytes = MdocIssuer.wrapTag24(new Map());
         Optional<byte[]> jwkThumbprint = responseEncryptionPublicJwk.map(MdocPresentationBuilder::computeThumbprint);
-        byte[] sessionTranscript = SessionTranscript.build(clientId, nonce, jwkThumbprint, responseUri);
+        DataItem sessionTranscript = SessionTranscript.buildDataItem(clientId, nonce, jwkThumbprint, responseUri);
         byte[] deviceAuthentication = CborUtil.encode(new CborBuilder()
                 .addArray()
                 .add("DeviceAuthentication")
-                .add(CborUtil.decodeSingle(sessionTranscript))
+                .add(sessionTranscript)
                 .add(credential.docType())
                 .add(deviceNameSpacesBytes)
                 .end()

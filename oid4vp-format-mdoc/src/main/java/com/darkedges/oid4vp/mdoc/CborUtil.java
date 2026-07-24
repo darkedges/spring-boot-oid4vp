@@ -31,9 +31,22 @@ final class CborUtil {
     static DataItem decodeSingle(byte[] bytes) {
         List<DataItem> items;
         try {
-            items = CborDecoder.decode(bytes);
+            // Use the instance API rather than the CborDecoder.decode(byte[]) convenience method so we can
+            // turn on rejectDuplicateKeys: this input is an untrusted mdoc DeviceResponse from a Wallet, and
+            // the library defaults to *allowing* duplicate keys in a CBOR map (last one silently wins) --
+            // exactly the kind of parser-ambiguity a malicious/malformed presentation could exploit to make
+            // different parts of this code observe different values for what's nominally "the same" key.
+            CborDecoder decoder = new CborDecoder(new java.io.ByteArrayInputStream(bytes));
+            decoder.setRejectDuplicateKeys(true);
+            items = decoder.decode();
         } catch (CborException e) {
             throw new MdocVerificationException("failed to decode CBOR", e);
+        } catch (StackOverflowError e) {
+            // co.nstant.in:cbor is a recursive-descent decoder with no nesting-depth limit -- a maliciously
+            // deeply-nested CBOR value (e.g. thousands of one-byte-header nested arrays) from an untrusted
+            // Wallet presentation would otherwise crash the handling thread with an uncaught Error instead
+            // of failing this presentation's verification cleanly.
+            throw new MdocVerificationException("CBOR input is too deeply nested to decode", e);
         }
         if (items.size() != 1) {
             throw new MdocVerificationException("expected exactly one top-level CBOR data item, found " + items.size());
