@@ -321,6 +321,12 @@ request parameter instead, since that would be an open redirect. Each relying-pa
 `wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
 here lets a caller redirect anywhere they choose.
 
+All of the above — create the plan, capture its exported `authorization_endpoint`, restart compose with
+it wired in, open the invoke URL, wait for the result — is exactly what `conformance/run_conformance.py`
+automates against a self-hosted `gitlab.com/openid/conformance-suite` instance; see
+`conformance/README.md` for usage. The manual steps above remain the fallback/explainer of what it does
+under the hood.
+
 ## Notes
 
 - The Wallet self-issuing its own credentials (`DemoCredentialConfig` for `dc+sd-jwt`,
