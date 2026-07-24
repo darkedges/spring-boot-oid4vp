@@ -81,7 +81,8 @@ class Oid4vpAuthorizationResponseAuthenticationProviderTest {
     private static Oid4vpAuthorizationResponseAuthenticationProvider provider() throws Exception {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
-        return new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver(), fixedClock());
+        return new Oid4vpAuthorizationResponseAuthenticationProvider(
+                validator, issuerKeyResolver(), registrationId -> Optional.empty(), fixedClock());
     }
 
     private static DcqlQuery dcqlQuery() {

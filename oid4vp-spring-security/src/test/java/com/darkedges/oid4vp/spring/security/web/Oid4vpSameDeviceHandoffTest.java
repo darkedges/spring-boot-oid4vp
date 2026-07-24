@@ -109,7 +109,8 @@ class Oid4vpSameDeviceHandoffTest {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         ProviderManager authenticationManager = new ProviderManager(
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver(), fixedClock()));
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver(), registrationId -> Optional.empty(), fixedClock()));
 
         Oid4vpAuthorizationResponseAuthenticationConverter converter =
                 new Oid4vpAuthorizationResponseAuthenticationConverter(requestRepository, RESPONSE_MATCHER, null);
@@ -179,7 +180,8 @@ class Oid4vpSameDeviceHandoffTest {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         ProviderManager authenticationManager = new ProviderManager(
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver(), fixedClock()));
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver(), registrationId -> Optional.empty(), fixedClock()));
         Oid4vpAuthorizationResponseAuthenticationConverter converter =
                 new Oid4vpAuthorizationResponseAuthenticationConverter(requestRepository, RESPONSE_MATCHER, null);
         Oid4vpAuthorizationResponseAuthenticationFilter responseFilter =

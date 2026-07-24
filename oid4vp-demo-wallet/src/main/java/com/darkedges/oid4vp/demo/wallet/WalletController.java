@@ -72,7 +72,14 @@ public class WalletController {
         String requestJson = restClient.get().uri(body.verifierAuthorizeUrl()).retrieve().body(String.class);
         JsonNode request = mapper.readTree(requestJson);
 
-        String audience = request.get("client_id").asText();
+        // A real Wallet would derive this itself from the signed Request Object's x5c chain when the
+        // client_id is x509_san_dns (OpenID4VP requires binding to "x509_hash:<sha256 of the leaf cert>",
+        // not the literal client_id) — this endpoint's unsigned request never carries that certificate, so
+        // AuthorizeController precomputes the value for us instead. See its Javadoc for why that's safe
+        // only because this whole flow is a demo-only convenience shortcut.
+        JsonNode expectedAudience = request.get("expected_response_audience");
+        String audience = expectedAudience != null && !expectedAudience.isNull()
+                ? expectedAudience.asText() : request.get("client_id").asText();
         String nonce = request.get("nonce").asText();
         String state = request.get("state").asText();
         String responseUri = request.get("response_uri").asText();

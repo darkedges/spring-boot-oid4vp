@@ -111,7 +111,8 @@ class Oid4vpAuthorizationCodeCallbackFilterTest {
     private static ProviderManager authenticationManager() throws Exception {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
-        return new ProviderManager(new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver(), fixedClock()));
+        return new ProviderManager(new Oid4vpAuthorizationResponseAuthenticationProvider(
+                validator, issuerKeyResolver(), registrationId -> Optional.empty(), fixedClock()));
     }
 
     @Test

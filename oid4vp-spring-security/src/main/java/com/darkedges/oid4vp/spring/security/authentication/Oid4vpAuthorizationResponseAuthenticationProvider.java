@@ -1,5 +1,7 @@
 package com.darkedges.oid4vp.spring.security.authentication;
 
+import com.darkedges.oid4vp.core.request.ExpectedAudienceResolver;
+import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.Oid4vpErrorCode;
 import com.darkedges.oid4vp.core.response.Oid4vpException;
@@ -30,12 +32,15 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
 
     private final AuthorizationResponseValidator validator;
     private final IssuerKeyResolver issuerKeyResolver;
+    private final RequestObjectSigningKeyResolver requestObjectSigningKeyResolver;
     private final Clock clock;
 
     public Oid4vpAuthorizationResponseAuthenticationProvider(
-            AuthorizationResponseValidator validator, IssuerKeyResolver issuerKeyResolver, Clock clock) {
+            AuthorizationResponseValidator validator, IssuerKeyResolver issuerKeyResolver,
+            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver, Clock clock) {
         this.validator = validator;
         this.issuerKeyResolver = issuerKeyResolver;
+        this.requestObjectSigningKeyResolver = requestObjectSigningKeyResolver;
         this.clock = clock;
     }
 
@@ -65,7 +70,8 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "vp_token is not valid JSON", e);
         }
 
-        String expectedAudience = token.audienceOverride().orElseGet(() -> requestContext.clientId().fullClientId());
+        String expectedAudience = token.audienceOverride().orElseGet(() -> ExpectedAudienceResolver.resolve(
+                requestContext.clientId(), requestObjectSigningKeyResolver, requestContext.registrationId()));
 
         Map<String, List<VerifiedPresentation>> verified;
         try {

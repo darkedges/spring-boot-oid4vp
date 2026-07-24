@@ -321,3 +321,11 @@ here lets a caller redirect anywhere they choose.
   `/issuer-jwks` endpoint for credentials that carry no `x5c` (only the demo Wallet's own self-issued
   credential, via `DemoCredentialConfig`). A real Verifier resolves issuer trust through whatever
   framework it's deployed under.
+- `x509_san_dns` registrations (`demo`, `conformance`, `conformancecode` — all three) expect a Wallet's
+  response to be bound to `x509_hash:<base64url(sha256(DER of the request-signing certificate's leaf))>`,
+  not the literal `client_id` string — that's OpenID4VP's own Client Identifier Prefix binding rule, not a
+  demo simplification (`ExpectedAudienceResolver` computes it). The demo Wallet's `/present` flow fetches
+  an *unsigned* convenience JSON authorization request (`AuthorizeController`) that never carries the
+  signing certificate, so it can't compute this hash itself the way a real Wallet fetching the signed
+  `request_uri` would; `AuthorizeController` precomputes it into a bespoke `expected_response_audience`
+  field instead, which is only a safe shortcut because that whole JSON endpoint is already demo-only.

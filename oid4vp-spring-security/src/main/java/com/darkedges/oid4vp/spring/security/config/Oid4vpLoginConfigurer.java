@@ -266,7 +266,8 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     public void configure(H http) {
         AuthorizationResponseValidator validator = new AuthorizationResponseValidator(Map.copyOf(presentationVerifiers));
         ProviderManager authenticationManager = new ProviderManager(
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver, clock));
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver, requestObjectSigningKeyResolver, clock));
 
         Oid4vpAuthorizationResponseAuthenticationConverter converter = new Oid4vpAuthorizationResponseAuthenticationConverter(
                 authorizationRequestRepository, requestMatcher, responseDecryptionKeyResolver);

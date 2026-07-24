@@ -133,7 +133,8 @@ class Oid4vpDcApiAuthenticationConverterTest {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         Oid4vpAuthorizationResponseAuthenticationProvider provider =
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver, fixedClock());
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver, registrationId -> Optional.empty(), fixedClock());
 
         Authentication authenticated = provider.authenticate(unauthenticated);
 
@@ -188,7 +189,8 @@ class Oid4vpDcApiAuthenticationConverterTest {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
         Oid4vpAuthorizationResponseAuthenticationProvider provider =
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver, fixedClock());
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver, registrationId -> Optional.empty(), fixedClock());
 
         Authentication authenticated = provider.authenticate(unauthenticated);
 
