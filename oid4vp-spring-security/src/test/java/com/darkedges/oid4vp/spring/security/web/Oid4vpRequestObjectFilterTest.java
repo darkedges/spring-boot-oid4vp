@@ -58,6 +58,7 @@ class Oid4vpRequestObjectFilterTest {
         return new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration),
                 new InMemoryOid4vpAuthorizationRequestRepository(),
+                new InMemoryOid4vpEphemeralEncryptionKeyRepository(),
                 Clock.systemUTC(),
                 Duration.ofMinutes(10));
     }

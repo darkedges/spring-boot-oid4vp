@@ -343,3 +343,15 @@ here lets a caller redirect anywhere they choose.
   `client-metadata` declares both `A128GCM` and `A256GCM` under `encrypted_response_enc_values_supported`,
   as HAIP requires — Nimbus's `ECDHDecrypter` already handles either transparently, so this was a
   metadata-only change.
+- `conformance`'s response-encryption key is generated fresh per Authorization Request, not a static one —
+  HAIP forbids reusing the same response-encryption public key across requests.
+  `Oid4vpAuthorizationRequestService` generates a keypair (`EphemeralEncryptionKeyGenerator`,
+  `oid4vp-verifier-core`) each time it builds a request for a `direct_post.jwt`/`dc_api.jwt` registration,
+  injects the public half into that request's `client_metadata.jwks`, and saves the private half into an
+  `Oid4vpEphemeralEncryptionKeyRepository` (in-memory by default). `DemoVerifierEncryptionKeyConfig`'s
+  `ResponseDecryptionKeyResolver` just reads keys back out of that same repository by registration id — no
+  static key anywhere anymore. This repository has to be **the same instance** on both the request-building
+  side (`Oid4vpLoginConfigurer.ephemeralEncryptionKeyRepository(...)`, wired in `SecurityConfig`) and the
+  decryption side (`DemoVerifierEncryptionKeyConfig`) — Spring supplies the identical autoconfigured
+  singleton to both by default, but a hand-rolled setup that constructs two separate instances would see
+  every decryption fail with "no key found", since nothing would ever land in the copy being read from.

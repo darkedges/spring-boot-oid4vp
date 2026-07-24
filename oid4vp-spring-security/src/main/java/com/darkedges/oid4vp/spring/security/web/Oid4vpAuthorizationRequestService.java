@@ -2,11 +2,16 @@ package com.darkedges.oid4vp.spring.security.web;
 
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.request.AuthorizationRequest;
+import com.darkedges.oid4vp.core.request.ClientMetadata;
 import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
+import com.darkedges.oid4vp.verifier.encryption.EphemeralEncryptionKeyGenerator;
+import com.darkedges.oid4vp.verifier.encryption.EphemeralEncryptionKeyPair;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -38,8 +43,11 @@ public final class Oid4vpAuthorizationRequestService {
     private static final int TOKEN_BYTES = 32; // 256 bits
     private static final int CODE_VERIFIER_BYTES = 32; // -> 43 base64url chars, within RFC 7636's 43-128 range
 
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
     private final Oid4vpRelyingPartyRegistrationRepository registrations;
     private final Oid4vpAuthorizationRequestRepository requestRepository;
+    private final Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository;
     private final Clock clock;
     private final Duration requestTtl;
     private final SecureRandom random = new SecureRandom();
@@ -47,10 +55,12 @@ public final class Oid4vpAuthorizationRequestService {
     public Oid4vpAuthorizationRequestService(
             Oid4vpRelyingPartyRegistrationRepository registrations,
             Oid4vpAuthorizationRequestRepository requestRepository,
+            Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository,
             Clock clock,
             Duration requestTtl) {
         this.registrations = registrations;
         this.requestRepository = requestRepository;
+        this.ephemeralEncryptionKeyRepository = ephemeralEncryptionKeyRepository;
         this.clock = clock;
         this.requestTtl = requestTtl;
     }
@@ -98,7 +108,7 @@ public final class Oid4vpAuthorizationRequestService {
                     Optional.empty(),
                     Optional.of(state),
                     nonce,
-                    registration.clientMetadata(),
+                    clientMetadataFor(registration, registrationId),
                     RequestUriMethod.GET,
                     List.of(),
                     registration.verifierInfo(),
@@ -111,6 +121,34 @@ public final class Oid4vpAuthorizationRequestService {
                 clock.instant().plus(requestTtl), Optional.of(transactionId), codeVerifier));
 
         return new Oid4vpAuthorizationRequestResolution(request, transactionId);
+    }
+
+    /**
+     * For {@code direct_post.jwt}/{@code dc_api.jwt} registrations, generates a fresh response-encryption
+     * keypair for <em>this</em> request, saves the private half so it can be found later, and returns
+     * {@code client_metadata} with its {@code jwks} replaced by the public half — HAIP forbids reusing the
+     * same response-encryption key across Authorization Requests. Every other response mode returns the
+     * registration's static {@code client_metadata} unchanged.
+     */
+    private Optional<ClientMetadata> clientMetadataFor(Oid4vpRelyingPartyRegistration registration, String registrationId) {
+        ResponseMode responseMode = registration.responseMode();
+        if (responseMode != ResponseMode.DIRECT_POST_JWT && responseMode != ResponseMode.DC_API_JWT) {
+            return registration.clientMetadata();
+        }
+
+        ClientMetadata staticMetadata = registration.clientMetadata()
+                .orElseThrow(() -> new IllegalStateException(
+                        "registration \"" + registrationId + "\" uses " + responseMode.value()
+                                + " but has no client-metadata configured (needed for vp_formats_supported etc.)"));
+
+        EphemeralEncryptionKeyPair keyPair = EphemeralEncryptionKeyGenerator.generate();
+        ephemeralEncryptionKeyRepository.save(registrationId, keyPair.privateJwk(), clock.instant().plus(requestTtl));
+
+        ObjectNode jwks = MAPPER.createObjectNode();
+        jwks.putArray("keys").add(keyPair.publicJwk());
+
+        return Optional.of(new ClientMetadata(
+                Optional.of(jwks), staticMetadata.encryptedResponseEncValuesSupported(), staticMetadata.vpFormatsSupported()));
     }
 
     private String randomUrlSafeToken() {

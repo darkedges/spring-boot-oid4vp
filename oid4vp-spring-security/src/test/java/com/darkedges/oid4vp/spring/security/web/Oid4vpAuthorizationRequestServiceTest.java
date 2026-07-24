@@ -6,10 +6,12 @@ import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.request.AuthorizationRequest;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
+import com.darkedges.oid4vp.core.request.ClientMetadata;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
 import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -17,8 +19,11 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,7 +55,7 @@ class Oid4vpAuthorizationRequestServiceTest {
         InMemoryOid4vpAuthorizationRequestRepository requestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
         Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration), requestRepository,
-                Clock.systemUTC(), Duration.ofMinutes(10));
+                new InMemoryOid4vpEphemeralEncryptionKeyRepository(), Clock.systemUTC(), Duration.ofMinutes(10));
 
         AuthorizationRequest request = service.resolve("conformancecode").request();
 
@@ -89,7 +94,7 @@ class Oid4vpAuthorizationRequestServiceTest {
         InMemoryOid4vpAuthorizationRequestRepository requestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
         Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration), requestRepository,
-                Clock.systemUTC(), Duration.ofMinutes(10));
+                new InMemoryOid4vpEphemeralEncryptionKeyRepository(), Clock.systemUTC(), Duration.ofMinutes(10));
 
         AuthorizationRequest request = service.resolve("demo").request();
 
@@ -103,5 +108,50 @@ class Oid4vpAuthorizationRequestServiceTest {
         String state = request.state().orElseThrow();
         Oid4vpAuthorizationRequestContext context = requestRepository.consume(state).orElseThrow();
         assertThat(context.codeVerifier()).isEmpty();
+        assertThat(request.clientMetadata()).isEmpty();
+    }
+
+    @Test
+    void directPostJwtRegistrationGetsAFreshResponseEncryptionKeyPerRequest() {
+        DcqlQuery dcqlQuery = sampleDcqlQuery();
+        ClientMetadata staticMetadata = new ClientMetadata(Optional.empty(), List.of("A128GCM"), Map.of());
+        Oid4vpRelyingPartyRegistration registration = new Oid4vpRelyingPartyRegistration(
+                "conformance",
+                new ClientIdentifierPrefix.X509Hash("dummy-hash"),
+                URI.create("https://verifier.example.org/response"),
+                ResponseMode.DIRECT_POST_JWT,
+                () -> dcqlQuery,
+                Optional.of(staticMetadata),
+                Optional.empty(),
+                List.of(),
+                Optional.empty());
+
+        InMemoryOid4vpEphemeralEncryptionKeyRepository ephemeralKeys = new InMemoryOid4vpEphemeralEncryptionKeyRepository();
+        Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
+                new InMemoryOid4vpRelyingPartyRegistrationRepository(registration), new InMemoryOid4vpAuthorizationRequestRepository(),
+                ephemeralKeys, Clock.systemUTC(), Duration.ofMinutes(10));
+
+        AuthorizationRequest first = service.resolve("conformance").request();
+        AuthorizationRequest second = service.resolve("conformance").request();
+
+        String firstKid = publicKeyId(first);
+        String secondKid = publicKeyId(second);
+        assertThat(firstKid).isNotEqualTo(secondKid);
+
+        // encrypted_response_enc_values_supported/vp_formats_supported carried through from the static
+        // config unchanged; only jwks was replaced.
+        assertThat(first.clientMetadata()).isPresent();
+        assertThat(first.clientMetadata().get().encryptedResponseEncValuesSupported()).isEqualTo(List.of("A128GCM"));
+
+        // Both generated keys are still independently resolvable (neither overwrote the other).
+        JsonNode liveKeys = ephemeralKeys.resolveLiveKeys("conformance", Instant.now());
+        List<String> liveKids = new ArrayList<>();
+        liveKeys.get("keys").forEach(k -> liveKids.add(k.get("kid").asText()));
+        assertThat(liveKids).containsExactlyInAnyOrder(firstKid, secondKid);
+    }
+
+    private static String publicKeyId(AuthorizationRequest request) {
+        JsonNode jwks = request.clientMetadata().orElseThrow().jwks().orElseThrow();
+        return jwks.get("keys").get(0).get("kid").asText();
     }
 }

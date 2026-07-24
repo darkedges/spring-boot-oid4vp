@@ -9,6 +9,7 @@ import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpTransactionResultRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestRepository;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpEphemeralEncryptionKeyRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,6 +62,7 @@ public class SecurityConfig {
             HttpSecurity http,
             Oid4vpRelyingPartyRegistrationRepository registrations,
             Oid4vpAuthorizationRequestRepository requestRepository,
+            Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository,
             Oid4vpTransactionResultRepository transactionResultRepository,
             @Qualifier("sdJwtVcPresentationVerifier") PresentationVerifier sdJwtVcPresentationVerifier,
             IssuerKeyResolver issuerKeyResolver,
@@ -78,6 +80,9 @@ public class SecurityConfig {
                 .with(Oid4vpLoginConfigurer.oid4vpLogin(), configurer -> configurer
                         .relyingPartyRegistrationRepository(registrations)
                         .authorizationRequestRepository(requestRepository)
+                        // Must be the same instance DemoVerifierEncryptionKeyConfig's responseDecryptionKeyResolver
+                        // reads from — see Oid4vpLoginConfigurer.ephemeralEncryptionKeyRepository's Javadoc.
+                        .ephemeralEncryptionKeyRepository(ephemeralEncryptionKeyRepository)
                         .presentationVerifier(sdJwtVcPresentationVerifier)
                         .issuerKeyResolver(issuerKeyResolver)
                         .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)

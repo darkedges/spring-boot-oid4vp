@@ -9,9 +9,11 @@ import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
 import com.darkedges.oid4vp.spring.security.authentication.Oid4vpAuthorizationResponseAuthenticationProvider;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpAuthorizationRequestRepository;
+import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpEphemeralEncryptionKeyRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationCodeCallbackFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestService;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpEphemeralEncryptionKeyRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthenticationConverter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthenticationFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiAuthenticationConverter;
@@ -47,6 +49,7 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     private Oid4vpRelyingPartyRegistrationRepository relyingPartyRegistrationRepository;
     private Oid4vpAuthorizationRequestRepository authorizationRequestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
+    private Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository = new InMemoryOid4vpEphemeralEncryptionKeyRepository();
     private final Map<CredentialFormat, PresentationVerifier> presentationVerifiers = new HashMap<>();
     private IssuerKeyResolver issuerKeyResolver;
     private ResponseDecryptionKeyResolver responseDecryptionKeyResolver;
@@ -82,6 +85,16 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     public Oid4vpLoginConfigurer<H> authorizationRequestRepository(Oid4vpAuthorizationRequestRepository repository) {
         this.authorizationRequestRepository = repository;
+        return this;
+    }
+
+    /** Only matters for {@code direct_post.jwt}/{@code dc_api.jwt} registrations (see
+     * {@code Oid4vpAuthorizationRequestService}, which generates a fresh response-encryption key per
+     * request here and saves it into this repository). If the application also builds its
+     * {@code ResponseDecryptionKeyResolver} from a shared instance of this repository — as it must, to
+     * find the keys generated here — pass that <em>same</em> instance to both places. */
+    public Oid4vpLoginConfigurer<H> ephemeralEncryptionKeyRepository(Oid4vpEphemeralEncryptionKeyRepository repository) {
+        this.ephemeralEncryptionKeyRepository = repository;
         return this;
     }
 
@@ -293,7 +306,8 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
                         "relyingPartyRegistrationRepository must be configured to host request objects via requestObjectSigningKeyResolver(...)");
             }
             Oid4vpAuthorizationRequestService requestService = new Oid4vpAuthorizationRequestService(
-                    relyingPartyRegistrationRepository, authorizationRequestRepository, clock, requestTtl);
+                    relyingPartyRegistrationRepository, authorizationRequestRepository,
+                    ephemeralEncryptionKeyRepository, clock, requestTtl);
             Oid4vpRequestObjectFilter requestObjectFilter = new Oid4vpRequestObjectFilter(
                     requestObjectRequestMatcher, requestService, requestObjectSigningKeyResolver, requestObjectSigningAlgorithm);
             http.addFilterBefore(requestObjectFilter, UsernamePasswordAuthenticationFilter.class);

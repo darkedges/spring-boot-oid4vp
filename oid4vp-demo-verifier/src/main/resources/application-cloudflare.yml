@@ -39,13 +39,13 @@ oid4vp:
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
           "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
-        # Public half of DemoVerifierEncryptionKeyConfig's static key — keep in sync if regenerated.
+        # No "jwks" here on purpose: Oid4vpAuthorizationRequestService generates a fresh response-encryption
+        # keypair per request and injects its public half here at request-build time (HAIP forbids reusing
+        # the same one across requests — see DemoVerifierEncryptionKeyConfig). A static jwks would just be
+        # dead config, immediately overridden every time.
         # vp_formats_supported is REQUIRED (see "demo" above for why); same shape either way.
         client-metadata: >
-          {"jwks":{"keys":[{"kty":"EC","use":"enc","crv":"P-256","kid":"demo-verifier-encryption",
-          "x":"xrGuOuYtOsauuXNHkXlsFo93P14Yfu1VNXmpZR9-9JI",
-          "y":"b_Xpz-0tRjZfXuwuA-UClHGO2P9t03b0qPeV9yn-cY0","alg":"ECDH-ES"}]},
-          "encrypted_response_enc_values_supported":["A128GCM","A256GCM"],
+          {"encrypted_response_enc_values_supported":["A128GCM","A256GCM"],
           "vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
           "kb-jwt_alg_values":["ES256"]}}}
         verifier-info: >

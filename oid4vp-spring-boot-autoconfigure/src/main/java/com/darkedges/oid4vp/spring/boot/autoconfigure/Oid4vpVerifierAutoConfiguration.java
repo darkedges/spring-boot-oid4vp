@@ -18,8 +18,10 @@ import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPa
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpAuthorizationRequestRepository;
+import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpEphemeralEncryptionKeyRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestService;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpEphemeralEncryptionKeyRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
@@ -79,11 +81,19 @@ public class Oid4vpVerifierAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    public Oid4vpEphemeralEncryptionKeyRepository oid4vpEphemeralEncryptionKeyRepository() {
+        return new InMemoryOid4vpEphemeralEncryptionKeyRepository();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     public Oid4vpAuthorizationRequestService oid4vpAuthorizationRequestService(
             Oid4vpRelyingPartyRegistrationRepository registrations,
             Oid4vpAuthorizationRequestRepository requestRepository,
+            Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository,
             Oid4vpProperties properties) {
-        return new Oid4vpAuthorizationRequestService(registrations, requestRepository, Clock.systemUTC(), properties.getRequestTtl());
+        return new Oid4vpAuthorizationRequestService(
+                registrations, requestRepository, ephemeralEncryptionKeyRepository, Clock.systemUTC(), properties.getRequestTtl());
     }
 
     private static Oid4vpRelyingPartyRegistration toRegistration(String registrationId, Oid4vpProperties.RelyingParty relyingParty) {
