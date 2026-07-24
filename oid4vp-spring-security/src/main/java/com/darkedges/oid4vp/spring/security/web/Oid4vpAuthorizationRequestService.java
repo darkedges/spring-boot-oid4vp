@@ -3,7 +3,6 @@ package com.darkedges.oid4vp.spring.security.web;
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.request.AuthorizationRequest;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
-import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
@@ -92,7 +91,7 @@ public final class Oid4vpAuthorizationRequestService {
                     Optional.of(state),
                     nonce,
                     registration.clientMetadata(),
-                    RequestUriMethod.GET,
+                    registration.requestUriMethod(),
                     List.of(),
                     registration.verifierInfo(),
                     Optional.of(deriveCodeChallengeS256(verifier)),
@@ -109,7 +108,7 @@ public final class Oid4vpAuthorizationRequestService {
                     Optional.of(state),
                     nonce,
                     clientMetadataFor(registration, registrationId),
-                    RequestUriMethod.GET,
+                    registration.requestUriMethod(),
                     List.of(),
                     registration.verifierInfo(),
                     Optional.empty(),

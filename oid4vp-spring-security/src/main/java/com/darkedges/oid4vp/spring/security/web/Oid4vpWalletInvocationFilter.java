@@ -1,5 +1,6 @@
 package com.darkedges.oid4vp.spring.security.web;
 
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import jakarta.servlet.FilterChain;
@@ -18,10 +19,12 @@ import java.util.Optional;
 /**
  * Redirects the End-User's browser to a Wallet's {@code authorization_endpoint} with {@code client_id}
  * and {@code request_uri} attached — the same-device invocation a web-based Wallet expects, as opposed to
- * a QR code or {@code openid4vp://} deep link. Requires the target registration's
- * {@link Oid4vpRelyingPartyRegistration#walletAuthorizationEndpoint()} to be configured; there's no
- * request parameter to supply or override it here, since accepting an arbitrary caller-supplied redirect
- * target would be an open redirect.
+ * a QR code or {@code openid4vp://} deep link. Also attaches {@code request_uri_method=post} when the
+ * registration is configured for it ({@link Oid4vpRelyingPartyRegistration#requestUriMethod()}); omitted
+ * entirely for the {@code GET} default, since that's the implicit behavior when the parameter is absent.
+ * Requires the target registration's {@link Oid4vpRelyingPartyRegistration#walletAuthorizationEndpoint()}
+ * to be configured; there's no request parameter to supply or override it here, since accepting an
+ * arbitrary caller-supplied redirect target would be an open redirect.
  *
  * <p>Intended uses: pointing at a real web-based Wallet in production, or — the reason this exists —
  * pointing at an OpenID Foundation conformance suite Verifier test plan's exported
@@ -85,6 +88,9 @@ public class Oid4vpWalletInvocationFilter extends OncePerRequestFilter {
         String redirectUri = endpoint + separator
                 + "client_id=" + urlEncode(clientId)
                 + "&request_uri=" + urlEncode(requestUri);
+        if (registration.get().requestUriMethod() == RequestUriMethod.POST) {
+            redirectUri += "&request_uri_method=post";
+        }
 
         response.sendRedirect(redirectUri);
     }

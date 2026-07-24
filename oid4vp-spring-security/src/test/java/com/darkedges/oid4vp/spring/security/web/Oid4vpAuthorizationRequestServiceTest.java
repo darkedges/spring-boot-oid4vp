@@ -7,6 +7,7 @@ import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.request.AuthorizationRequest;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
 import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPartyRegistrationRepository;
@@ -50,7 +51,8 @@ class Oid4vpAuthorizationRequestServiceTest {
                 List.of(),
                 Optional.of(new CodeFlowConfig(
                         URI.create("https://verifier.example.org/callback"),
-                        Optional.of(URI.create("https://wallet.example.com/token")))));
+                        Optional.of(URI.create("https://wallet.example.com/token")))),
+                RequestUriMethod.GET);
 
         InMemoryOid4vpAuthorizationRequestRepository requestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
         Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
@@ -89,7 +91,8 @@ class Oid4vpAuthorizationRequestServiceTest {
                 Optional.empty(),
                 Optional.empty(),
                 List.of(),
-                Optional.empty());
+                Optional.empty(),
+                RequestUriMethod.GET);
 
         InMemoryOid4vpAuthorizationRequestRepository requestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
         Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
@@ -109,6 +112,31 @@ class Oid4vpAuthorizationRequestServiceTest {
         Oid4vpAuthorizationRequestContext context = requestRepository.consume(state).orElseThrow();
         assertThat(context.codeVerifier()).isEmpty();
         assertThat(request.clientMetadata()).isEmpty();
+        assertThat(request.requestUriMethod()).isEqualTo(RequestUriMethod.GET);
+    }
+
+    @Test
+    void registrationConfiguredForRequestUriMethodPostPropagatesIt() {
+        DcqlQuery dcqlQuery = sampleDcqlQuery();
+        Oid4vpRelyingPartyRegistration registration = new Oid4vpRelyingPartyRegistration(
+                "conformance",
+                new ClientIdentifierPrefix.X509Hash("dummy-hash"),
+                URI.create("https://verifier.example.org/response"),
+                ResponseMode.DIRECT_POST,
+                () -> dcqlQuery,
+                Optional.empty(),
+                Optional.empty(),
+                List.of(),
+                Optional.empty(),
+                RequestUriMethod.POST);
+
+        Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(
+                new InMemoryOid4vpRelyingPartyRegistrationRepository(registration), new InMemoryOid4vpAuthorizationRequestRepository(),
+                new InMemoryOid4vpEphemeralEncryptionKeyRepository(), Clock.systemUTC(), Duration.ofMinutes(10));
+
+        AuthorizationRequest request = service.resolve("conformance").request();
+
+        assertThat(request.requestUriMethod()).isEqualTo(RequestUriMethod.POST);
     }
 
     @Test
@@ -124,7 +152,8 @@ class Oid4vpAuthorizationRequestServiceTest {
                 Optional.of(staticMetadata),
                 Optional.empty(),
                 List.of(),
-                Optional.empty());
+                Optional.empty(),
+                RequestUriMethod.GET);
 
         InMemoryOid4vpEphemeralEncryptionKeyRepository ephemeralKeys = new InMemoryOid4vpEphemeralEncryptionKeyRepository();
         Oid4vpAuthorizationRequestService service = new Oid4vpAuthorizationRequestService(

@@ -6,6 +6,7 @@ import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
@@ -54,7 +55,8 @@ class Oid4vpRequestObjectFilterTest {
                 Optional.empty(),
                 Optional.empty(),
                 List.of(),
-                Optional.empty());
+                Optional.empty(),
+                RequestUriMethod.GET);
         return new Oid4vpAuthorizationRequestService(
                 new InMemoryOid4vpRelyingPartyRegistrationRepository(registration),
                 new InMemoryOid4vpAuthorizationRequestRepository(),

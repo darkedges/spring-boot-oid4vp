@@ -84,6 +84,12 @@ public class Oid4vpProperties {
         /** OPTIONAL — the Wallet's token endpoint, paired with {@link #redirectUri}. */
         private String walletTokenEndpoint;
 
+        /** {@code request_uri_method} — {@code "get"} (default) or {@code "post"}, per OpenID4VP 1.1
+         * "Request URI Method post". Only affects the {@code request_uri_method} parameter on the invoke
+         * redirect ({@code Oid4vpWalletInvocationFilter}) — the request_uri endpoint itself always accepts
+         * either method regardless of this setting. */
+        private String requestUriMethod = "get";
+
         public String getClientId() {
             return clientId;
         }
@@ -154,6 +160,14 @@ public class Oid4vpProperties {
 
         public void setWalletTokenEndpoint(String walletTokenEndpoint) {
             this.walletTokenEndpoint = walletTokenEndpoint;
+        }
+
+        public String getRequestUriMethod() {
+            return requestUriMethod;
+        }
+
+        public void setRequestUriMethod(String requestUriMethod) {
+            this.requestUriMethod = requestUriMethod;
         }
     }
 }

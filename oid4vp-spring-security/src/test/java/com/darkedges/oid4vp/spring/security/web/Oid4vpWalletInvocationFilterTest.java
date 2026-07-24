@@ -5,6 +5,7 @@ import com.darkedges.oid4vp.core.dcql.CredentialQuery;
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.spring.security.registration.InMemoryOid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
@@ -38,6 +39,11 @@ class Oid4vpWalletInvocationFilterTest {
     }
 
     private static Oid4vpRelyingPartyRegistrationRepository registrations(Optional<URI> walletAuthorizationEndpoint) {
+        return registrations(walletAuthorizationEndpoint, RequestUriMethod.GET);
+    }
+
+    private static Oid4vpRelyingPartyRegistrationRepository registrations(
+            Optional<URI> walletAuthorizationEndpoint, RequestUriMethod requestUriMethod) {
         Oid4vpRelyingPartyRegistration registration = new Oid4vpRelyingPartyRegistration(
                 "demo-verifier",
                 new ClientIdentifierPrefix.X509SanDns("verifier.example.org"),
@@ -47,7 +53,8 @@ class Oid4vpWalletInvocationFilterTest {
                 Optional.empty(),
                 walletAuthorizationEndpoint,
                 List.of(),
-                Optional.empty());
+                Optional.empty(),
+                requestUriMethod);
         return new InMemoryOid4vpRelyingPartyRegistrationRepository(registration);
     }
 
@@ -127,5 +134,23 @@ class Oid4vpWalletInvocationFilterTest {
 
         assertThat(chain.getRequest()).isNotNull();
         assertThat(response.getStatus()).isEqualTo(200); // MockHttpServletResponse default, untouched
+    }
+
+    @Test
+    void appendsRequestUriMethodPostWhenTheRegistrationIsConfiguredForIt() throws Exception {
+        Oid4vpWalletInvocationFilter filter = new Oid4vpWalletInvocationFilter(
+                REQUEST_MATCHER,
+                registrations(Optional.of(URI.create("https://wallet.example.com/authorize")), RequestUriMethod.POST),
+                REQUEST_URI_BASE);
+
+        MockHttpServletRequest request = new MockHttpServletRequest("GET", "/oid4vp/invoke/demo-verifier");
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        filter.doFilter(request, response, new MockFilterChain());
+
+        assertThat(response.getRedirectedUrl()).isEqualTo(
+                "https://wallet.example.com/authorize?client_id=x509_san_dns%3Averifier.example.org"
+                        + "&request_uri=https%3A%2F%2Fverifier.example.org%2Foid4vp%2Frequest%2Fdemo-verifier"
+                        + "&request_uri_method=post");
     }
 }

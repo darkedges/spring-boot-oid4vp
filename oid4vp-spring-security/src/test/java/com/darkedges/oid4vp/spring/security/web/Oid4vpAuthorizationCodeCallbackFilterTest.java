@@ -5,6 +5,7 @@ import com.darkedges.oid4vp.core.dcql.CredentialQuery;
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
@@ -105,7 +106,8 @@ class Oid4vpAuthorizationCodeCallbackFilterTest {
                 List.of(),
                 Optional.of(new CodeFlowConfig(
                         URI.create("https://verifier.example.org/oid4vp/callback/" + REGISTRATION_ID),
-                        Optional.of(URI.create("https://wallet.example.com/token")))));
+                        Optional.of(URI.create("https://wallet.example.com/token")))),
+                RequestUriMethod.GET);
     }
 
     private static ProviderManager authenticationManager() throws Exception {
@@ -235,7 +237,8 @@ class Oid4vpAuthorizationCodeCallbackFilterTest {
                 List.of(),
                 Optional.of(new CodeFlowConfig(
                         URI.create("https://verifier.example.org/oid4vp/callback/" + REGISTRATION_ID),
-                        Optional.empty())));
+                        Optional.empty())),
+                RequestUriMethod.GET);
 
         InMemoryOid4vpAuthorizationRequestRepository requestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
         String state = "callback-state-5";

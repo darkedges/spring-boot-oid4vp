@@ -35,6 +35,10 @@ oid4vp:
         client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/conformance"
         response-mode: "direct_post.jwt"
+        # Exercises OpenID4VP 1.1 "Request URI Method post": the Wallet POSTs (rather than GETs)
+        # /oid4vp/request/conformance, sending a wallet_nonce Oid4vpRequestObjectFilter echoes back into
+        # the signed Request Object. demo/conformancecode stay on the GET default.
+        request-uri-method: "post"
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},

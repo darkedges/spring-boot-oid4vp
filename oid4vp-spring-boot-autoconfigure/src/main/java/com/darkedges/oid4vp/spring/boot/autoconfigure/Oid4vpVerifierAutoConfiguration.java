@@ -6,6 +6,7 @@ import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefixParser;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
 import com.darkedges.oid4vp.core.request.ClientMetadataReader;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.core.request.VerifierInfoEntry;
 import com.darkedges.oid4vp.core.request.VerifierInfoReader;
@@ -106,6 +107,7 @@ public class Oid4vpVerifierAutoConfiguration {
                 .map(URI::create);
         List<VerifierInfoEntry> verifierInfo = readVerifierInfo(relyingParty.getVerifierInfo());
         Optional<CodeFlowConfig> codeFlow = readCodeFlow(relyingParty);
+        RequestUriMethod requestUriMethod = RequestUriMethod.parse(relyingParty.getRequestUriMethod());
         return new Oid4vpRelyingPartyRegistration(
                 registrationId,
                 clientId,
@@ -115,7 +117,8 @@ public class Oid4vpVerifierAutoConfiguration {
                 clientMetadata,
                 walletAuthorizationEndpoint,
                 verifierInfo,
-                codeFlow);
+                codeFlow,
+                requestUriMethod);
     }
 
     /**

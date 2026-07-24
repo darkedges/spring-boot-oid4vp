@@ -355,3 +355,10 @@ here lets a caller redirect anywhere they choose.
   decryption side (`DemoVerifierEncryptionKeyConfig`) — Spring supplies the identical autoconfigured
   singleton to both by default, but a hand-rolled setup that constructs two separate instances would see
   every decryption fail with "no key found", since nothing would ever land in the copy being read from.
+- `conformance` uses `request-uri-method: "post"` (a registration property, `RequestUriMethod`/
+  `Oid4vpRelyingPartyRegistration.requestUriMethod`, defaulting to `get` for `demo`/`conformancecode`) —
+  exercises OpenID4VP 1.1 "Request URI Method post": `Oid4vpWalletInvocationFilter` appends
+  `request_uri_method=post` to the invoke redirect, and the Wallet then POSTs (rather than GETs)
+  `/oid4vp/request/conformance`, optionally sending a `wallet_nonce` form field that
+  `Oid4vpRequestObjectFilter` already echoed back into the signed Request Object regardless of this
+  setting — that handling predates this property; the property just makes it get exercised.

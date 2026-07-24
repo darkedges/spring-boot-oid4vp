@@ -3,6 +3,7 @@ package com.darkedges.oid4vp.spring.security.registration;
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.request.ClientMetadata;
+import com.darkedges.oid4vp.core.request.RequestUriMethod;
 import com.darkedges.oid4vp.core.request.ResponseMode;
 import com.darkedges.oid4vp.core.request.VerifierInfoEntry;
 
@@ -38,6 +39,11 @@ import java.util.function.Supplier;
  *                          Code Grant ({@code response_type=code}) instead of {@code vp_token} — see
  *                          {@link CodeFlowConfig}. {@code responseMode} above is ignored when this is
  *                          present ({@link ResponseMode#QUERY} is used internally).
+ * @param requestUriMethod  how a Wallet should fetch {@code request_uri} — {@link RequestUriMethod#GET}
+ *                          (the default) or {@link RequestUriMethod#POST}, the latter per OpenID4VP 1.1
+ *                          "Request URI Method post". Only affects the actual {@code request_uri_method}
+ *                          parameter {@code Oid4vpWalletInvocationFilter} adds to the invoke redirect —
+ *                          {@code Oid4vpRequestObjectFilter} already accepts either method regardless.
  */
 public record Oid4vpRelyingPartyRegistration(
         String registrationId,
@@ -48,7 +54,8 @@ public record Oid4vpRelyingPartyRegistration(
         Optional<ClientMetadata> clientMetadata,
         Optional<URI> walletAuthorizationEndpoint,
         List<VerifierInfoEntry> verifierInfo,
-        Optional<CodeFlowConfig> codeFlow) {
+        Optional<CodeFlowConfig> codeFlow,
+        RequestUriMethod requestUriMethod) {
 
     public Oid4vpRelyingPartyRegistration {
         if (registrationId == null || registrationId.isBlank()) {
@@ -63,5 +70,6 @@ public record Oid4vpRelyingPartyRegistration(
         walletAuthorizationEndpoint = walletAuthorizationEndpoint == null ? Optional.empty() : walletAuthorizationEndpoint;
         verifierInfo = verifierInfo == null ? List.of() : List.copyOf(verifierInfo);
         codeFlow = codeFlow == null ? Optional.empty() : codeFlow;
+        requestUriMethod = requestUriMethod == null ? RequestUriMethod.GET : requestUriMethod;
     }
 }
