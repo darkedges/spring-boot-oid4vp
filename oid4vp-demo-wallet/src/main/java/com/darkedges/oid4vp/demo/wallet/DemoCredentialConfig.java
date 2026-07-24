@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.demo.wallet;
 
 import com.darkedges.oid4vp.core.dcql.eval.CredentialStore;
+import com.darkedges.oid4vp.mdoc.MdocHeldCredential;
 import com.darkedges.oid4vp.sdjwt.Disclosure;
 import com.darkedges.oid4vp.sdjwt.SdJwtVcHeldCredential;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -15,6 +16,7 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -48,13 +50,15 @@ public class DemoCredentialConfig {
     }
 
     @Bean
-    public SdJwtVcHeldCredential demoCredential(ECKey demoIssuerKey, ECKey demoHolderKey) throws JOSEException {
+    public SdJwtVcHeldCredential demoCredential(
+            ECKey demoIssuerKey, ECKey demoHolderKey,
+            @Value("${demo.issuer-url:http://localhost:8081}") String issuerUrl) throws JOSEException {
         Disclosure givenName = Disclosure.createObjectProperty(randomSalt(), "given_name", TextNode.valueOf("Jane"));
         Disclosure familyName = Disclosure.createObjectProperty(randomSalt(), "family_name", TextNode.valueOf("Demo"));
 
         Instant now = Instant.now();
         JWTClaimsSet claims = new JWTClaimsSet.Builder()
-                .issuer("http://localhost:8081")
+                .issuer(issuerUrl)
                 .issueTime(Date.from(now))
                 .expirationTime(Date.from(now.plusSeconds(3600 * 24 * 365)))
                 .claim("vct", DemoConstants.VCT)
@@ -73,8 +77,8 @@ public class DemoCredentialConfig {
     }
 
     @Bean
-    public CredentialStore demoCredentialStore(SdJwtVcHeldCredential demoCredential) {
-        return CredentialStore.of(List.of(demoCredential));
+    public CredentialStore demoCredentialStore(SdJwtVcHeldCredential demoCredential, MdocHeldCredential demoMdocCredential) {
+        return CredentialStore.of(List.of(demoCredential, demoMdocCredential));
     }
 
     private static String randomSalt() {

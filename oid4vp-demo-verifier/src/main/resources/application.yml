@@ -2,18 +2,62 @@ server:
   port: 8090
 
 demo:
+  # Shown on the browser demo page ("<employer-name> Employee Verification" etc.) — override via the
+  # DEMO_EMPLOYER_NAME environment variable (Spring Boot relaxed-binds env vars to properties).
+  employer-name: Acme Corp
+  # Fetched server-side (IssuerKeyResolver hitting /issuer-jwks) — under docker (application-docker.yml)
+  # this becomes the compose service name, since it's called Verifier-container -> Wallet-container.
   wallet-base-url: http://localhost:8081
+  # Fetched by the browser (the Sign in with Wallet page calling /present cross-origin) — deliberately a
+  # SEPARATE property from wallet-base-url above: under docker, wallet-base-url is container-internal and
+  # unreachable from a real browser, but this one always is, since the browser reaches both apps via their
+  # published host ports regardless of docker/bare-metal. Not overridden in application-docker.yml for
+  # that reason (same reasoning as demo.same-device-result-base-uri).
+  wallet-base-url-for-browser: http://localhost:8081
+  # The URL the Wallet itself must use to fetch our /oid4vp/authorize/demo endpoint — same idea as
+  # wallet-base-url above, mirrored the other direction. Bare-metal: same origin the browser uses. Under
+  # docker (see application-docker.yml): the compose service name, since "localhost" inside the Wallet's
+  # container is itself, not us.
+  verifier-base-url-for-wallet: http://localhost:8090
+  # Base for the signed request_uri handed to an invoked Wallet (see .walletInvocation(...) in
+  # SecurityConfig) — fetched externally (a real Wallet, or a conformance test suite), never by our own
+  # containers, so not overridden in application-docker.yml (same reasoning as
+  # demo.same-device-result-base-uri).
+  request-uri-base: http://localhost:8090/oid4vp/request
 
 oid4vp:
   verifier:
     relying-party:
       demo:
-        client-id: "redirect_uri:http://localhost:8090/login/oid4vp/direct-post/demo"
+        # x509_hash (not redirect_uri:) because the request is signed — see DemoVerifierSigningKeyConfig —
+        # and per spec, "implementations requiring signed requests cannot use the redirect_uri Client
+        # Identifier Prefix". x509_hash rather than x509_san_dns since HAIP forbids the latter; the value
+        # is base64url(SHA-256(DER of demo-verifier-signing-key.p12's leaf certificate)) — a property of
+        # the certificate itself, so it's identical across every registration/environment regardless of
+        # domain, and must be recomputed if that keystore is ever regenerated.
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
           "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
+      # Local, bare-metal-friendly counterpart to "demo" for mso_mdoc — always direct_post.jwt (encrypted),
+      # since mdoc's SessionTranscript needs the mdocGeneratedNonce that only travels via the response
+      # JWE's apu header (see README: "Extra relying parties for conformance testing"). Unlike
+      # "conformance"/"conformancemdoc" (cloudflare-only, suite-facing), this exists so the local demo
+      # Wallet <-> demo Verifier round trip can be exercised for mdoc without needing the conformance suite
+      # or a Cloudflare tunnel at all.
+      demomdoc:
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
+        response-uri: "http://localhost:8090/login/oid4vp/direct-post/demomdoc"
+        response-mode: "direct_post.jwt"
+        dcql-query: >
+          {"credentials":[{"id":"mdl","format":"mso_mdoc",
+          "meta":{"doctype_value":"org.iso.18013.5.1.mDL"},
+          "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"]}]}]}
+        client-metadata: >
+          {"encrypted_response_enc_values_supported":["A128GCM","A256GCM"],
+          "vp_formats_supported":{"mso_mdoc":{"deviceauth_alg_values":[-7],"issuerauth_alg_values":[-7]}}}
 
 logging:
   level:

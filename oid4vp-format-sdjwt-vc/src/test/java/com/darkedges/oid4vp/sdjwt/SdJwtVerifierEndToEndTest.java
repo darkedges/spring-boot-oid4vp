@@ -41,7 +41,7 @@ class SdJwtVerifierEndToEndTest {
 
         JsonNode issuerPublicJwk = MAPPER.readTree(
                 SdJwtVcldFixture.issuerKey().toPublicJWK().toJSONString());
-        IssuerKeyResolver issuerKeyResolver = (issuer, keyId) -> Optional.of(issuerPublicJwk);
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerPublicJwk);
 
         // A fixed point in time within [iat, exp] of the fixture (also matching the KB-JWT's own iat),
         // so validity checks are reproducible rather than depending on the wall clock.
@@ -51,6 +51,9 @@ class SdJwtVerifierEndToEndTest {
                 query,
                 SdJwtVcldFixture.keyBindingNonce(),
                 SdJwtVcldFixture.verifierIdentifier(),
+                SdJwtVcldFixture.verifierIdentifier(),
+                "https://verifier.example.org/response",
+                Optional.empty(),
                 issuerKeyResolver,
                 clock);
 
@@ -75,11 +78,12 @@ class SdJwtVerifierEndToEndTest {
                 .meta(new SdJwtVcMeta(List.of("https://credentials.example.com/example_credential")))
                 .build();
         JsonNode issuerPublicJwk = jsonOrThrow();
-        IssuerKeyResolver issuerKeyResolver = (issuer, keyId) -> Optional.of(issuerPublicJwk);
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerPublicJwk);
         Clock clock = Clock.fixed(Instant.ofEpochSecond(1744743394L), ZoneOffset.UTC);
 
         PresentationVerificationParams params = new PresentationVerificationParams(
-                query, "wrong-nonce", SdJwtVcldFixture.verifierIdentifier(), issuerKeyResolver, clock);
+                query, "wrong-nonce", SdJwtVcldFixture.verifierIdentifier(), SdJwtVcldFixture.verifierIdentifier(),
+                "https://verifier.example.org/response", Optional.empty(), issuerKeyResolver, clock);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
                         () -> new SdJwtVerifier().verify(new PresentationEntry.StringPresentation(presentation), params))

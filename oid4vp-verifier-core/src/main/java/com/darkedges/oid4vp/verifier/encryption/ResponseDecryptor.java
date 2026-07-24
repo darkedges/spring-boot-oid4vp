@@ -18,6 +18,7 @@ import com.nimbusds.jose.jwk.RSAKey;
 
 import java.text.ParseException;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Decrypts an encrypted Authorization Response (the {@code response} JWT of {@code direct_post.jwt} /
@@ -61,6 +62,35 @@ public final class ResponseDecryptor {
             return MAPPER.readTree(jweObject.getPayload().toString());
         } catch (Exception e) {
             throw new Oid4vpException(Oid4vpErrorCode.INVALID_REQUEST, "decrypted Authorization Response payload is not valid JSON", e);
+        }
+    }
+
+    /**
+     * The public half of the response-encryption key this JWE was actually encrypted to — mdoc's
+     * {@code OpenID4VPHandover} hashes its RFC 7638 thumbprint (OpenID4VP 1.1 §"Handover and
+     * SessionTranscript Definitions"), computed independently by both sides from a key they each already
+     * hold, rather than a value either side has to invent and communicate. Resolves the same key
+     * {@link #decrypt} would select (by JWE {@code kid} header, falling back to the sole candidate key),
+     * but only needs the private JWK Set to look it up — no decryption performed here.
+     */
+    public static Optional<JsonNode> resolveResponseEncryptionPublicJwk(String jwe, JsonNode privateJwksJson) {
+        JWEObject jweObject;
+        try {
+            jweObject = JWEObject.parse(jwe);
+        } catch (ParseException e) {
+            throw new Oid4vpException(Oid4vpErrorCode.INVALID_REQUEST, "\"response\" is not a valid JWE", e);
+        }
+        JWKSet jwkSet;
+        try {
+            jwkSet = JWKSet.parse(privateJwksJson.toString());
+        } catch (ParseException e) {
+            throw new IllegalStateException("configured response decryption JWK Set is not valid JSON", e);
+        }
+        JWK key = selectKey(jwkSet, jweObject.getHeader().getKeyID());
+        try {
+            return Optional.of(MAPPER.readTree(key.toPublicJWK().toJSONString()));
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to serialize the response decryption key's public half", e);
         }
     }
 

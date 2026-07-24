@@ -14,8 +14,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
-/** Verifies a Key Binding JWT's signature and its binding to the current transaction (nonce/audience)
- * and to a specific SD-JWT presentation ({@code sd_hash}). */
+/** Verifies a Key Binding JWT's signature, its binding to the current transaction (nonce/audience) and
+ * to a specific SD-JWT presentation ({@code sd_hash}), and that {@code iat} is fresh — within
+ * {@code allowedClockSkew} either side of now, not just not-in-the-future. A stale Key Binding JWT (e.g.
+ * one reused from a year-old presentation) is exactly the kind of replay this claim exists to prevent. */
 public final class KbJwtVerifier {
 
     private KbJwtVerifier() {}
@@ -65,6 +67,9 @@ public final class KbJwtVerifier {
         Instant iat = claims.getIssueTime() == null ? null : claims.getIssueTime().toInstant();
         if (iat != null && iat.isAfter(clock.instant().plus(allowedClockSkew))) {
             throw new SdJwtVerificationException("Key Binding JWT iat is too far in the future: " + iat);
+        }
+        if (iat != null && iat.isBefore(clock.instant().minus(allowedClockSkew))) {
+            throw new SdJwtVerificationException("Key Binding JWT iat is too far in the past: " + iat);
         }
     }
 

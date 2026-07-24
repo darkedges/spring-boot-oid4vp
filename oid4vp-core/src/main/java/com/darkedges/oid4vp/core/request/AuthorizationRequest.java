@@ -25,7 +25,9 @@ public record AuthorizationRequest(
         Optional<ClientMetadata> clientMetadata,
         RequestUriMethod requestUriMethod,
         List<TransactionDataEntry> transactionData,
-        List<VerifierInfoEntry> verifierInfo) {
+        List<VerifierInfoEntry> verifierInfo,
+        Optional<String> codeChallenge,
+        Optional<String> codeChallengeMethod) {
 
     public AuthorizationRequest {
         if (responseType == null || responseType.isBlank()) {
@@ -49,6 +51,8 @@ public record AuthorizationRequest(
         requestUriMethod = requestUriMethod == null ? RequestUriMethod.GET : requestUriMethod;
         transactionData = transactionData == null ? List.of() : List.copyOf(transactionData);
         verifierInfo = verifierInfo == null ? List.of() : List.copyOf(verifierInfo);
+        codeChallenge = codeChallenge == null ? Optional.empty() : codeChallenge;
+        codeChallengeMethod = codeChallengeMethod == null ? Optional.empty() : codeChallengeMethod;
 
         if (dcqlQuery.isPresent() == scope.isPresent()) {
             throw new IllegalArgumentException("exactly one of dcql_query or scope (as a DCQL query alias) must be present");
@@ -59,6 +63,15 @@ public record AuthorizationRequest(
             }
             if (redirectUri.isPresent()) {
                 throw new IllegalArgumentException("redirect_uri MUST NOT be present when response_mode is " + responseMode);
+            }
+        } else if (responseMode == ResponseMode.QUERY) {
+            // The Authorization Code Grant (response_type=code): the Wallet redirects the browser back to
+            // redirect_uri with ?code=...&state=..., not a direct_post to response_uri.
+            if (redirectUri.isEmpty()) {
+                throw new IllegalArgumentException("redirect_uri is required when response_mode is " + responseMode);
+            }
+            if (responseUri.isPresent()) {
+                throw new IllegalArgumentException("response_uri MUST NOT be present when response_mode is " + responseMode);
             }
         }
     }

@@ -1,0 +1,39 @@
+# Layers on top of docker-compose.yml to expose the demo behind Cloudflare, e.g.:
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+# Point a Cloudflare Tunnel at these two hostnames -> localhost ports (see README: "Hosting behind
+# Cloudflare"). Update application-cloudflare.yml in each module first if you're using different domains
+# than wallet.zkp.au / verify.irving.au.
+#
+# Overrides (not adds to) the base file's SPRING_PROFILES_ACTIVE=docker: the "cloudflare" profile fully
+# specifies every URL "docker" would otherwise set to a container-internal hostname, since this pairing
+# is meant to work as if Wallet and Verifier are two independently-hosted parties, not just two
+# containers on one private network — see application-cloudflare.yml in each module for why.
+services:
+  wallet:
+    environment:
+      - SPRING_PROFILES_ACTIVE=cloudflare
+
+  verifier:
+    environment:
+      - SPRING_PROFILES_ACTIVE=cloudflare
+      - DEMO_EMPLOYER_NAME=ZKP
+      # A conformance test run's exported authorization_endpoint — set this to enable
+      # GET /oid4vp/invoke/conformance, which redirects a browser there with client_id/request_uri
+      # attached. See README: "Invoking a Wallet". Deliberately only set here (not in docker-compose.yml):
+      # the "conformance" registration only exists under this profile (application-cloudflare.yml) — even
+      # setting this to an empty string under a profile where "conformance" isn't otherwise fully defined
+      # makes Spring Boot infer a broken partial registration (just this one property, no client-id) and
+      # crash at startup. Empty by default (no wallet invocation possible) is fine *here* because
+      # application-cloudflare.yml already fully defines "conformance" independently of this var.
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCE_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT:-}
+      # Same idea, for the "conformancemdoc" registration (credential_format=iso_mdl / mso_mdoc).
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCEMDOC_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_MDOC_WALLET_AUTHORIZATION_ENDPOINT:-}
+      # Same idea, for the "conformancecode" registration (response_type=code / Authorization Code Grant).
+      # Both env vars are safe to set independently here (unlike the pair above): "conformancecode"
+      # already always has redirect-uri set in application-cloudflare.yml, which alone is the code-flow
+      # toggle — wallet-authorization-endpoint and wallet-token-endpoint are each independently OPTIONAL
+      # on top of that (see CodeFlowConfig / DemoVerifierAutoConfiguration.readCodeFlow), so setting only
+      # one, both, or neither is always safe and never crashes startup (see
+      # Oid4vpVerifierAutoConfiguration.readCodeFlow).
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCECODE_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_CODE_WALLET_AUTHORIZATION_ENDPOINT:-}
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCECODE_WALLETTOKENENDPOINT=${CONFORMANCE_CODE_WALLET_TOKEN_ENDPOINT:-}

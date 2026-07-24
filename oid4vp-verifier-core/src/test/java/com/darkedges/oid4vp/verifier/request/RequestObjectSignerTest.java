@@ -15,10 +15,18 @@ import com.nimbusds.jose.crypto.ECDSAVerifier;
 import com.nimbusds.jose.jwk.Curve;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator;
+import com.nimbusds.jose.util.Base64;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 import org.junit.jupiter.api.Test;
 
+import java.io.InputStream;
+import java.security.KeyStore;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateEncodingException;
+import java.security.interfaces.ECPrivateKey;
+import java.security.interfaces.ECPublicKey;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
@@ -45,7 +53,9 @@ class RequestObjectSignerTest {
                 Optional.empty(),
                 RequestUriMethod.GET,
                 List.of(),
-                List.of());
+                List.of(),
+                Optional.empty(),
+                Optional.empty());
     }
 
     @Test
@@ -81,5 +91,63 @@ class RequestObjectSignerTest {
         SignedJWT jwt = RequestObjectSigner.sign(sampleRequest(), privateJwk, JWSAlgorithm.ES256, Optional.of("wallet-provided-nonce"));
 
         assertThat(jwt.getJWTClaimsSet().getStringClaim("wallet_nonce")).isEqualTo("wallet-provided-nonce");
+    }
+
+    // A throwaway self-signed EC key + matching cert (openssl req -x509 ..., PKCS12), checked in as a test
+    // resource — Nimbus's ECKey.Builder validates that an x5c entry's public key matches the JWK's own,
+    // so a real cert whose keypair we don't otherwise have is rejected.
+    //
+    // Built via plain java.security.KeyStore rather than Nimbus's own ECKey.load(KeyStore, ...): that
+    // convenience method reaches for org.bouncycastle.cert.jcajce.JcaX509CertificateHolder internally,
+    // and this project deliberately has no BouncyCastle dependency (JDK 21's native EC support is enough
+    // everywhere else) — not worth pulling one in just for this helper.
+    private static ECKey loadTestSigningKeyWithCertChain() throws Exception {
+        char[] password = "changeit".toCharArray();
+        String alias = "test-signing";
+        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        try (InputStream in = RequestObjectSignerTest.class.getResourceAsStream("/test-signing-key.p12")) {
+            keyStore.load(in, password);
+        }
+
+        ECPrivateKey privateKey = (ECPrivateKey) keyStore.getKey(alias, password);
+        Certificate[] chain = keyStore.getCertificateChain(alias);
+        ECPublicKey publicKey = (ECPublicKey) chain[0].getPublicKey();
+        List<Base64> x5c = Arrays.stream(chain)
+                .map(cert -> {
+                    try {
+                        return Base64.encode(cert.getEncoded());
+                    } catch (CertificateEncodingException e) {
+                        throw new IllegalStateException(e);
+                    }
+                })
+                .toList();
+
+        return new ECKey.Builder(Curve.P_256, publicKey)
+                .privateKey(privateKey)
+                .x509CertChain(x5c)
+                .build();
+    }
+
+    @Test
+    void carriesAnX509CertChainFromTheSigningKeyIntoTheJwsHeader() throws Exception {
+        ECKey signingKey = loadTestSigningKeyWithCertChain();
+        List<Base64> certChain = signingKey.getX509CertChain();
+        assertThat(certChain).isNotEmpty();
+        JsonNode privateJwk = MAPPER.readTree(signingKey.toJSONString());
+
+        SignedJWT jwt = RequestObjectSigner.sign(sampleRequest(), privateJwk, JWSAlgorithm.ES256, Optional.empty());
+
+        assertThat(jwt.getHeader().getX509CertChain()).isEqualTo(certChain);
+        assertThat(jwt.verify(new ECDSAVerifier(signingKey.toECPublicKey()))).isTrue();
+    }
+
+    @Test
+    void omitsX509CertChainHeaderWhenTheSigningKeyHasNone() throws Exception {
+        ECKey signingKey = new ECKeyGenerator(Curve.P_256).generate();
+        JsonNode privateJwk = MAPPER.readTree(signingKey.toJSONString());
+
+        SignedJWT jwt = RequestObjectSigner.sign(sampleRequest(), privateJwk, JWSAlgorithm.ES256, Optional.empty());
+
+        assertThat(jwt.getHeader().getX509CertChain()).isNull();
     }
 }

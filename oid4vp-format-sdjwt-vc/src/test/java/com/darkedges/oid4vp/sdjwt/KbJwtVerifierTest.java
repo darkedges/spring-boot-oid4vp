@@ -47,6 +47,40 @@ class KbJwtVerifierTest {
     }
 
     @Test
+    void rejectsAKeyBindingJwtWhoseIatIsTooFarInThePast() throws Exception {
+        // Reproduces OpenID Foundation conformance suite test oid4vp-1final-verifier-kb-jwt-iat-in-past:
+        // a Key Binding JWT reused from a presentation built a year ago must be rejected, not just one
+        // whose iat is implausibly in the future.
+        SdJwt presentation = SdJwtParser.parse(FixtureLoader.readExampleCompact("sd_jwt_vcld/01/sd_jwt_presentation.txt"));
+        String sdJwtWithoutKeyBinding = presentation.toStringWithoutKeyBinding();
+        Instant iat = SdJwtVcldFixture.iat();
+
+        SignedJWT kbJwt = KbJwtBuilder.build(
+                sdJwtWithoutKeyBinding,
+                SdJwtVcldFixture.keyBindingNonce(),
+                SdJwtVcldFixture.verifierIdentifier(),
+                iat,
+                JWSAlgorithm.ES256,
+                new ECDSASigner(SdJwtVcldFixture.holderKey()),
+                Optional.empty(),
+                Optional.empty());
+        String sdHash = KbJwtBuilder.computeSdHash(sdJwtWithoutKeyBinding, "sha-256");
+
+        Clock oneYearLater = Clock.fixed(iat.plus(Duration.ofDays(365)), ZoneOffset.UTC);
+
+        Assertions.assertThatThrownBy(() -> KbJwtVerifier.verify(
+                        kbJwt,
+                        SdJwtVcldFixture.holderKey(),
+                        SdJwtVcldFixture.keyBindingNonce(),
+                        SdJwtVcldFixture.verifierIdentifier(),
+                        sdHash,
+                        oneYearLater,
+                        Duration.ofMinutes(5)))
+                .isInstanceOf(SdJwtVerificationException.class)
+                .hasMessageContaining("too far in the past");
+    }
+
+    @Test
     void independentlyVerifiesThePreBuiltFixtureKeyBindingJwt() throws Exception {
         // Proves interop with the external sd-jwt-python reference implementation that generated this
         // fixture, without requiring identical signature bytes (ECDSA is non-deterministic).

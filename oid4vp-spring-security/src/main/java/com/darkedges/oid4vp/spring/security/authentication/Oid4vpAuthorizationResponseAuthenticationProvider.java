@@ -1,5 +1,7 @@
 package com.darkedges.oid4vp.spring.security.authentication;
 
+import com.darkedges.oid4vp.core.request.ExpectedAudienceResolver;
+import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.Oid4vpErrorCode;
 import com.darkedges.oid4vp.core.response.Oid4vpException;
@@ -8,6 +10,7 @@ import com.darkedges.oid4vp.core.response.VpToken;
 import com.darkedges.oid4vp.core.response.VpTokenReader;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestContext;
 import com.darkedges.oid4vp.verifier.AuthorizationResponseValidator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.core.Authentication;
@@ -17,6 +20,7 @@ import org.springframework.security.core.authority.AuthorityUtils;
 import java.time.Clock;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Validates a received {@link Oid4vpAuthorizationResponseAuthenticationToken}'s {@code vp_token} against
@@ -30,12 +34,15 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
 
     private final AuthorizationResponseValidator validator;
     private final IssuerKeyResolver issuerKeyResolver;
+    private final RequestObjectSigningKeyResolver requestObjectSigningKeyResolver;
     private final Clock clock;
 
     public Oid4vpAuthorizationResponseAuthenticationProvider(
-            AuthorizationResponseValidator validator, IssuerKeyResolver issuerKeyResolver, Clock clock) {
+            AuthorizationResponseValidator validator, IssuerKeyResolver issuerKeyResolver,
+            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver, Clock clock) {
         this.validator = validator;
         this.issuerKeyResolver = issuerKeyResolver;
+        this.requestObjectSigningKeyResolver = requestObjectSigningKeyResolver;
         this.clock = clock;
     }
 
@@ -65,12 +72,23 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "vp_token is not valid JSON", e);
         }
 
-        String expectedAudience = token.audienceOverride().orElseGet(() -> requestContext.clientId().fullClientId());
+        String expectedAudience = token.audienceOverride().orElseGet(() -> ExpectedAudienceResolver.resolve(
+                requestContext.clientId(), requestObjectSigningKeyResolver, requestContext.registrationId()));
+
+        Optional<JsonNode> responseEncryptionPublicJwk = token.responseEncryptionPublicJwkJson().map(json -> {
+            try {
+                return MAPPER.readTree(json);
+            } catch (Exception e) {
+                throw new IllegalStateException("failed to parse the response-encryption public JWK captured during decryption", e);
+            }
+        });
 
         Map<String, List<VerifiedPresentation>> verified;
         try {
             verified = validator.validate(
-                    requestContext.dcqlQuery(), vpToken, requestContext.nonce(), expectedAudience, issuerKeyResolver, clock);
+                    requestContext.dcqlQuery(), vpToken, requestContext.nonce(), expectedAudience,
+                    requestContext.clientId().fullClientId(), requestContext.responseUri().toString(),
+                    responseEncryptionPublicJwk, issuerKeyResolver, clock);
         } catch (Oid4vpException e) {
             throw new Oid4vpAuthenticationException(e.errorCode(), e.getMessage(), e);
         }

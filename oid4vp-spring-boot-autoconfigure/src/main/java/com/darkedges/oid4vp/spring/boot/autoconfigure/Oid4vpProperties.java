@@ -59,11 +59,36 @@ public class Oid4vpProperties {
 
         private String responseUri;
 
+        /** {@code response_mode}, e.g. {@code direct_post} (default) or {@code direct_post.jwt} — the
+         * latter requires {@code client-metadata} to carry a response-encryption {@code jwks} entry. */
+        private String responseMode = "direct_post";
+
         /** The {@code dcql_query} value, as JSON text. */
         private String dcqlQuery;
 
         /** OPTIONAL {@code client_metadata} value, as JSON text. */
         private String clientMetadata;
+
+        /** OPTIONAL fixed Wallet {@code authorization_endpoint} to redirect the End-User's browser to —
+         * see {@code Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint}. */
+        private String walletAuthorizationEndpoint;
+
+        /** OPTIONAL {@code verifier_info} value (a JSON array of attestations), as JSON text. */
+        private String verifierInfo;
+
+        /** OPTIONAL — set together with {@link #walletTokenEndpoint} to enable the OAuth 2.0
+         * Authorization Code Grant ({@code response_type=code}) for this registration instead of
+         * {@code vp_token} — see {@code CodeFlowConfig}. This Verifier's own callback URL. */
+        private String redirectUri;
+
+        /** OPTIONAL — the Wallet's token endpoint, paired with {@link #redirectUri}. */
+        private String walletTokenEndpoint;
+
+        /** {@code request_uri_method} — {@code "get"} (default) or {@code "post"}, per OpenID4VP 1.1
+         * "Request URI Method post". Only affects the {@code request_uri_method} parameter on the invoke
+         * redirect ({@code Oid4vpWalletInvocationFilter}) — the request_uri endpoint itself always accepts
+         * either method regardless of this setting. */
+        private String requestUriMethod = "get";
 
         public String getClientId() {
             return clientId;
@@ -81,6 +106,14 @@ public class Oid4vpProperties {
             this.responseUri = responseUri;
         }
 
+        public String getResponseMode() {
+            return responseMode;
+        }
+
+        public void setResponseMode(String responseMode) {
+            this.responseMode = responseMode;
+        }
+
         public String getDcqlQuery() {
             return dcqlQuery;
         }
@@ -95,6 +128,46 @@ public class Oid4vpProperties {
 
         public void setClientMetadata(String clientMetadata) {
             this.clientMetadata = clientMetadata;
+        }
+
+        public String getWalletAuthorizationEndpoint() {
+            return walletAuthorizationEndpoint;
+        }
+
+        public void setWalletAuthorizationEndpoint(String walletAuthorizationEndpoint) {
+            this.walletAuthorizationEndpoint = walletAuthorizationEndpoint;
+        }
+
+        public String getVerifierInfo() {
+            return verifierInfo;
+        }
+
+        public void setVerifierInfo(String verifierInfo) {
+            this.verifierInfo = verifierInfo;
+        }
+
+        public String getRedirectUri() {
+            return redirectUri;
+        }
+
+        public void setRedirectUri(String redirectUri) {
+            this.redirectUri = redirectUri;
+        }
+
+        public String getWalletTokenEndpoint() {
+            return walletTokenEndpoint;
+        }
+
+        public void setWalletTokenEndpoint(String walletTokenEndpoint) {
+            this.walletTokenEndpoint = walletTokenEndpoint;
+        }
+
+        public String getRequestUriMethod() {
+            return requestUriMethod;
+        }
+
+        public void setRequestUriMethod(String requestUriMethod) {
+            this.requestUriMethod = requestUriMethod;
         }
     }
 }

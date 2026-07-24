@@ -15,6 +15,7 @@ import com.nimbusds.jwt.SignedJWT;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -68,7 +69,10 @@ public final class SdJwtVerifier implements PresentationVerifier {
             throw new SdJwtVerificationException("SD-JWT is missing required \"iss\" claim");
         }
         Optional<String> keyId = Optional.ofNullable(issuerSignedJwt.getHeader().getKeyID());
-        JsonNode jwkNode = params.issuerKeyResolver().resolve(issuer, keyId)
+        List<String> certificateChain = issuerSignedJwt.getHeader().getX509CertChain() == null
+                ? List.of()
+                : issuerSignedJwt.getHeader().getX509CertChain().stream().map(Object::toString).toList();
+        JsonNode jwkNode = params.issuerKeyResolver().resolve(issuer, keyId, certificateChain)
                 .orElseThrow(() -> new SdJwtVerificationException("no issuer key found for issuer \"" + issuer + "\""));
 
         try {

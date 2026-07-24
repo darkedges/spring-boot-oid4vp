@@ -71,7 +71,7 @@ class Oid4vpAuthorizationResponseAuthenticationProviderTest {
                 new Base64URL(issuerKeyYaml.get("y").toString()))
                 .build();
         JsonNode jwk = MAPPER.readTree(issuerKey.toJSONString());
-        return (issuer, keyId) -> Optional.of(jwk);
+        return (issuer, keyId, certificateChain) -> Optional.of(jwk);
     }
 
     private static Clock fixedClock() {
@@ -81,7 +81,8 @@ class Oid4vpAuthorizationResponseAuthenticationProviderTest {
     private static Oid4vpAuthorizationResponseAuthenticationProvider provider() throws Exception {
         AuthorizationResponseValidator validator =
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
-        return new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver(), fixedClock());
+        return new Oid4vpAuthorizationResponseAuthenticationProvider(
+                validator, issuerKeyResolver(), registrationId -> Optional.empty(), fixedClock());
     }
 
     private static DcqlQuery dcqlQuery() {

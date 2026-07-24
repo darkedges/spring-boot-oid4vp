@@ -11,12 +11,14 @@ import com.darkedges.oid4vp.core.response.PresentationVerificationParams;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.core.response.VerifiedPresentation;
 import com.darkedges.oid4vp.core.response.VpToken;
+import com.fasterxml.jackson.databind.JsonNode;
 
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Validates a full Authorization Response's {@code vp_token} against the {@link DcqlQuery} it is
@@ -37,6 +39,9 @@ public final class AuthorizationResponseValidator {
             VpToken vpToken,
             String expectedNonce,
             String expectedAudience,
+            String clientId,
+            String responseUri,
+            Optional<JsonNode> responseEncryptionPublicJwk,
             IssuerKeyResolver issuerKeyResolver,
             Clock clock) {
         DcqlResponseValidator.validate(query, vpToken);
@@ -54,8 +59,9 @@ public final class AuthorizationResponseValidator {
                         "no PresentationVerifier registered for format: " + credentialQuery.format());
             }
 
-            PresentationVerificationParams params =
-                    new PresentationVerificationParams(credentialQuery, expectedNonce, expectedAudience, issuerKeyResolver, clock);
+            PresentationVerificationParams params = new PresentationVerificationParams(
+                    credentialQuery, expectedNonce, expectedAudience, clientId, responseUri,
+                    responseEncryptionPublicJwk, issuerKeyResolver, clock);
 
             List<VerifiedPresentation> verified = new ArrayList<>();
             for (PresentationEntry presentationEntry : entry.getValue()) {

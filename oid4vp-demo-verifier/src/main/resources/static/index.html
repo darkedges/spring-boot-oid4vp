@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Employee Verification</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 480px;
+    margin: 10vh auto 0;
+    padding: 0 1.5rem;
+    color: #1a1a2e;
+    background: #f6f7fb;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { color: #eaeaf0; background: #14141c; }
+    .card { background: #1e1e2a !important; border-color: #33334a !important; }
+    code { background: #2a2a3a !important; }
+  }
+  header { text-align: center; margin-bottom: 2rem; }
+  header .logo { font-size: 2.5rem; }
+  header h1 { font-size: 1.25rem; margin: 0.25rem 0 0; }
+  header p { margin: 0.25rem 0 0; opacity: 0.7; font-size: 0.95rem; }
+  .card {
+    background: #fff;
+    border: 1px solid #e1e3ea;
+    border-radius: 12px;
+    padding: 2rem;
+    text-align: center;
+  }
+  .avatar { font-size: 3rem; }
+  button {
+    font-size: 1rem;
+    font-weight: 600;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    background: #4338ca;
+    color: #fff;
+    cursor: pointer;
+  }
+  button:hover { background: #3730a3; }
+  button:disabled { background: #9694c4; cursor: default; }
+  .status { min-height: 1.4em; margin-top: 1rem; font-size: 0.9rem; }
+  .status.error { color: #dc2626; }
+  .status.info { opacity: 0.7; }
+  .hidden { display: none; }
+  code {
+    background: #f0f0f5;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+  }
+  footer { text-align: center; margin-top: 1.5rem; font-size: 0.8rem; opacity: 0.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏢</div>
+  <h1 id="employer-heading">Employee Verification</h1>
+  <p>Prove you work here — no password, no HR lookup, just your Wallet.</p>
+</header>
+
+<div class="card">
+
+  <div id="loading">
+    <p class="status info">Checking your session…</p>
+  </div>
+
+  <div id="signed-out" class="hidden">
+    <p>Sign in with your Employee Wallet to verify your employment and access the staff area.</p>
+    <button id="sign-in-btn">Sign in with Wallet</button>
+    <p id="status" class="status"></p>
+  </div>
+
+  <div id="signed-in" class="hidden">
+    <div class="avatar">✅</div>
+    <p>Welcome, <strong id="employee-name"></strong>.</p>
+    <p class="status info" id="verified-line">Verified as an employee via your digital Wallet credential.</p>
+  </div>
+
+</div>
+
+<footer id="footer">Loading configuration…</footer>
+
+<script>
+  let demoConfig = null;
+
+  const loadingEl = document.getElementById("loading");
+  const signedOutEl = document.getElementById("signed-out");
+  const signedInEl = document.getElementById("signed-in");
+  const statusEl = document.getElementById("status");
+  const signInBtn = document.getElementById("sign-in-btn");
+
+  function show(el) {
+    for (const e of [loadingEl, signedOutEl, signedInEl]) e.classList.add("hidden");
+    el.classList.remove("hidden");
+  }
+
+  function setStatus(message, isError) {
+    statusEl.textContent = message || "";
+    statusEl.classList.toggle("error", Boolean(isError));
+  }
+
+  async function loadDemoConfig() {
+    const res = await fetch("/demo-config");
+    demoConfig = await res.json();
+
+    document.title = demoConfig.employerName + " — Employee Verification";
+    document.getElementById("employer-heading").textContent = demoConfig.employerName + " Employee Verification";
+    document.getElementById("verified-line").textContent =
+      "Verified as a " + demoConfig.employerName + " employee via your digital Wallet credential.";
+    document.getElementById("footer").textContent =
+      "Demo Wallet: " + demoConfig.walletBaseUrl + " · Demo Verifier: " + window.location.origin;
+  }
+
+  async function checkSession() {
+    try {
+      const res = await fetch("/profile", { credentials: "same-origin" });
+      if (res.ok) {
+        const profile = await res.json();
+        if (profile.authenticated) {
+          document.getElementById("employee-name").textContent =
+            [profile.given_name, profile.family_name].filter(Boolean).join(" ") || "Employee";
+          show(signedInEl);
+          return;
+        }
+      }
+    } catch (e) {
+      // fall through to signed-out state
+    }
+    show(signedOutEl);
+  }
+
+  async function signIn() {
+    signInBtn.disabled = true;
+    setStatus("Asking your Wallet to build a presentation…");
+    try {
+      // Neither the Wallet's URL nor the URL we hand it to fetch our Authorization Request from can be
+      // assumed (our own origin / a hardcoded localhost port) — they depend on how the two apps are
+      // deployed (docker-compose vs. separate public domains). See DemoConfigController.
+      const presentRes = await fetch(demoConfig.walletBaseUrl + "/present", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verifierAuthorizeUrl: demoConfig.verifierAuthorizeUrlForWallet })
+      });
+
+      if (!presentRes.ok) {
+        const body = await presentRes.json().catch(() => ({}));
+        setStatus("Wallet declined: " + (body.reason || presentRes.status), true);
+        signInBtn.disabled = false;
+        return;
+      }
+
+      const result = await presentRes.json();
+      if (!result.redirect_uri) {
+        setStatus("Unexpected response from Wallet (no redirect_uri).", true);
+        signInBtn.disabled = false;
+        return;
+      }
+
+      setStatus("Presentation accepted — signing you in…");
+      // Real navigation (not fetch) so the Verifier's Set-Cookie actually sticks.
+      window.location.href = result.redirect_uri;
+    } catch (e) {
+      setStatus("Couldn't reach the Wallet at " + demoConfig.walletBaseUrl + " — is it running?", true);
+      signInBtn.disabled = false;
+    }
+  }
+
+  signInBtn.addEventListener("click", signIn);
+  loadDemoConfig().then(checkSession);
+</script>
+
+</body>
+</html>

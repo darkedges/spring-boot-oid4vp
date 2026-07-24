@@ -1,0 +1,25 @@
+# Layers a Cloudflare Tunnel connector onto the stack, e.g.:
+#   CLOUDFLARE_TUNNEL_TOKEN="<token>" docker compose \
+#     -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+#
+# Setup (one-time, in the Cloudflare dashboard — both domains must be on the same account):
+#   1. Zero Trust -> Networks -> Tunnels -> Create a tunnel -> Cloudflared connector -> name it, e.g.
+#      "oid4vp-demo" -> copy the token shown (this is CLOUDFLARE_TUNNEL_TOKEN below).
+#   2. Add two Public Hostname routes on that tunnel:
+#        verify.irving.au -> HTTP -> verifier:8090
+#        wallet.zkp.au    -> HTTP -> wallet:8081
+#      (service targets are the docker-compose service names, not localhost — cloudflared reaches them
+#      over the compose network, same as any other container-to-container call in this stack.)
+#   3. Save. No DNS records to add by hand — the dashboard flow creates the CNAMEs for you.
+#
+# One tunnel/token covers both hostnames since they're on the same account; two separate domains on
+# different accounts would need two tunnels (and two cloudflared services here, one per token).
+services:
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN to the token from the Cloudflare dashboard}
+    depends_on:
+      - wallet
+      - verifier

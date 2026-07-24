@@ -49,6 +49,35 @@ real Wallet app required, everything is drivable with `curl`.
 | `oid4vp-demo-wallet` | `8081` | Self-issues one SD-JWT VC credential at startup and can present it to a Verifier on request |
 | `oid4vp-demo-verifier` | `8090` | Requests a presentation, verifies it, and gates `/profile` behind a valid one |
 
+### In a browser
+
+`oid4vp-demo-verifier` serves a small static page at `http://localhost:8090/` — "Acme Corp Employee
+Verification" — with a **Sign in with Wallet** button. It tells the same story `demo.sh` does, but as an
+End-User would experience it: click the button, the page calls the demo Wallet's `/present` endpoint
+cross-origin (CORS is opened up on the Wallet for `http://localhost:8090` — see `@CrossOrigin` on
+`WalletController.present`), the Wallet builds and submits the presentation, and the browser is redirected
+back to `/` — now signed in, showing "Welcome, Jane Demo".
+
+The "Acme Corp" name in the page's copy comes from `demo.employer-name` (`DemoConfigController`, exposed
+via `GET /demo-config`) — override it with the `DEMO_EMPLOYER_NAME` environment variable (Spring Boot
+relaxed-binds env vars to properties) to rebrand without touching HTML. Already wired into
+`docker-compose.yml` with a default of `Acme Corp`; set it in your shell or a `.env` file before
+`docker compose up`.
+
+This relies on the library's same-device `response_code`/`redirect_uri` handoff
+(`Oid4vpTransactionResultFilter`) redirecting to `/` on success rather than returning its default bare
+`{}` JSON ack — configured via `.sameDeviceResultRedirectUri("/")` in `SecurityConfig`.
+
+The page also can't hardcode which URL to hand the Wallet for fetching the Authorization Request:
+bare-metal that's the page's own origin (`http://localhost:8090`), but under docker-compose the Wallet's
+container can't reach that — its `localhost` is itself, not the Verifier. `GET /demo-config`
+(`DemoConfigController`, backed by `demo.verifier-base-url-for-wallet`, overridden in
+`application-docker.yml` to the compose service name) tells the page the right URL for whichever mode
+it's running in.
+
+Start both apps (`docker compose up --build`, or bare-metal per below) and open
+[http://localhost:8090](http://localhost:8090).
+
 ### Quickest path: `demo.sh`
 
 ```bash
@@ -154,11 +183,198 @@ followed by the End-User's browser (or `demo.sh`, running on your host), which r
 its published port on `localhost` either way. If you rename the services in `docker-compose.yml`, update
 `application-docker.yml` to match.
 
+### Hosting behind Cloudflare
+
+To expose the demo publicly — e.g. Wallet on `wallet.zkp.au`, Verifier on `verify.irving.au` — activate the
+**`cloudflare`** Spring profile instead of (not in addition to) `docker`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d --build
+```
+
+`application-cloudflare.yml` in each module sets every URL the two apps use — including the ones they use
+to call *each other* — to the public HTTPS domain, rather than a docker-compose-internal hostname. This is
+deliberate: the pairing is meant to work as if Wallet and Verifier are two independently-hosted parties on
+separate domains, not just two containers on one private network, so nothing round-trips through a
+`localhost`/service-name shortcut that only exists locally. If you're using different domains, edit both
+`application-cloudflare.yml` files (and `docker-compose.cloudflare.yml`'s comment) to match.
+
+You still need to actually get traffic to the containers. `docker-compose.tunnel.yml` layers on a
+`cloudflared` connector for this — see its header comment for the one-time dashboard setup (create a
+tunnel, add the two Public Hostname routes, copy the token):
+
+```bash
+CLOUDFLARE_TUNNEL_TOKEN="<token from the dashboard>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+```
+
+One tunnel/token covers both `verify.irving.au` and `wallet.zkp.au` as long as both domains are on the
+same Cloudflare account — the tunnel's Public Hostname routes point at the compose service names
+(`verifier:8090`, `wallet:8081`), reached over the compose network like any other container-to-container
+call in this stack, not `localhost`.
+
+Two properties matter here that are easy to conflate: `demo.wallet-base-url` is fetched **server-side** by
+the Verifier (`IssuerKeyResolver` hitting `/issuer-jwks`), while `demo.wallet-base-url-for-browser` is
+fetched **by the browser** itself (the "Sign in with Wallet" page calling `/present` cross-origin) — under
+plain `docker` these differ (container-internal vs. published-port), so they're separate properties on
+purpose; don't merge them back into one.
+
+### Signed Authorization Requests (`request_uri`)
+
+`GET /oid4vp/request/{registrationId}` (e.g. `/oid4vp/request/demo`) hosts a **signed** Request Object —
+`application/oauth-authz-req+jwt`, per RFC9101/OpenID4VP's `request_uri` mechanism — alongside the
+existing plain-JSON `/oid4vp/authorize/demo` (which the demo Wallet keeps using unchanged; nothing here
+affects that path).
+
+This exists for talking to a real/conformant Wallet — e.g. the OpenID Foundation's conformance suite, or
+anything that won't just trust an unsigned inline request the way the demo Wallet does. Signing requires
+switching the relying-party's `client-id` from `redirect_uri:...` to `x509_san_dns:<hostname>`: per spec,
+"implementations requiring signed requests cannot use the `redirect_uri` Client Identifier Prefix" (there's
+no key for the Wallet to verify against). `x509_san_dns` instead carries the signer's certificate chain
+directly in the JWS header's `x5c` field, so the Wallet verifies the signature against the leaf cert
+without needing to resolve a key some other way.
+
+The signing key is `oid4vp-demo-verifier/src/main/resources/demo-verifier-signing-key.p12` — a self-signed
+EC (P-256) cert generated once via `openssl` (see `DemoVerifierSigningKeyConfig`), with SANs covering
+`localhost`, `verifier` (the docker-compose service name), and `verify.irving.au` (the Cloudflare domain),
+matching whichever `client-id` each profile uses. It's demo-only, not a pattern for a real deployment,
+which would use a certificate issued by a CA the relying Wallets actually trust. Loaded via plain
+`java.security.KeyStore` rather than Nimbus's `ECKey.load(KeyStore, ...)` convenience method, which pulls
+in BouncyCastle internally — this project has no BC dependency and it wasn't worth adding one just for
+that.
+
+If you regenerate the cert for different hostnames, keep the `client-id` values in `application.yml` /
+`application-docker.yml` / `application-cloudflare.yml` in sync with its SANs.
+
+### Extra relying parties for conformance testing (`conformance`, `conformancemdoc`, `conformancecode`)
+
+`application-cloudflare.yml` defines **three extra** relying-party registrations alongside `demo`, each
+isolated so the local browser demo (`demo`, plain `direct_post`) is never affected:
+
+- **`conformance`** — `response_mode: direct_post.jwt` (encrypted response), `dc+sd-jwt`. No static key
+  involved: `Oid4vpAuthorizationRequestService` generates a fresh response-encryption keypair per
+  Authorization Request (`EphemeralEncryptionKeyGenerator`) and injects the public half into that
+  request's `client_metadata.jwks` — see "Notes" below.
+- **`conformancemdoc`** — `response_mode: direct_post.jwt`, `credential_format=iso_mdl` (`mso_mdoc`
+  instead of `dc+sd-jwt`). mdoc's `OpenID4VPHandover`/`SessionTranscript` (OpenID4VP 1.1 §"Handover and
+  SessionTranscript Definitions") binds the presentation to the RFC 7638 thumbprint of the Verifier's
+  response-encryption public key when the response is encrypted, or CBOR `null` when it isn't — both
+  sides derive this independently from a key they already hold (`client_metadata.jwks` on the Wallet
+  side, the same key by `kid` on the Verifier's decryption side —
+  `ResponseDecryptor.resolveResponseEncryptionPublicJwk` / `oid4vp-wallet-core`'s `ResponseEncryptor`), so
+  mdoc itself doesn't actually require encryption. This registration still uses `direct_post.jwt` because
+  the conformance test plans it targets do.
+- **`conformancecode`** — `response_type=code` (the OAuth 2.0 Authorization Code Grant, PKCE-protected).
+  Architecturally inverted from everything else here: per spec, "the VP Token is provided in the Token
+  Response", so *our Verifier* acts as the OAuth client — it sends the initial request (via the same
+  signed `request_uri` hosting), gets a `code` back at `redirect-uri` (`GET /oid4vp/callback/{registrationId}`,
+  `Oid4vpAuthorizationCodeCallbackFilter`), then exchanges it at `wallet-token-endpoint` for a Token
+  Response containing `vp_token` — validated through the exact same code path as `direct_post`
+  (`Oid4vpAuthorizationResponseAuthenticationProvider`; the token type it consumes is fully
+  transport-agnostic, so no library code needed changing there). `redirect-uri` alone is the code-flow
+  toggle on a registration; `wallet-token-endpoint` is independently optional — it's fine for it to stay
+  unset until a real test run supplies one, hosting/invoking still works either way, only the eventual
+  code exchange needs it and fails with a clear message if it's still missing.
+
+If a test plan wants plain `direct_post` instead of either, `demo` already does that.
+
+### Invoking a Wallet (`GET /oid4vp/invoke/{registrationId}`)
+
+Opening `/oid4vp/invoke/conformance` (or `/oid4vp/invoke/conformancemdoc`/`conformancecode`) in a browser
+redirects to a Wallet's `authorization_endpoint` with `client_id`/`request_uri` attached — "in the same way
+a web-based wallet would be invoked", which is exactly how the OpenID Foundation conformance suite
+documents inviting its own Verifier test plans. This is the missing piece for actually driving a
+conformance test run: create a Verifier test plan in the suite (DCQL, `dc+sd-jwt` or (for `conformancemdoc`)
+`credential_format=iso_mdl`, `x509_san_dns`, and whichever `response_type`/`response_mode` it asks for —
+`direct_post` maps to `demo`, `direct_post.jwt` to `conformance`/`conformancemdoc`, `code` to
+`conformancecode`), start it, copy the `authorization_endpoint` URL (and, for the `code` flow, the token
+endpoint URL too) from its "Exported Values" once it's `WAITING`, and set:
+
+```bash
+CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT="<paste the exported URL>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+# for the iso_mdl variant instead:
+CONFORMANCE_MDOC_WALLET_AUTHORIZATION_ENDPOINT="<exported authorization_endpoint>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+# for the code flow instead:
+CONFORMANCE_CODE_WALLET_AUTHORIZATION_ENDPOINT="<exported authorization_endpoint>" \
+  CONFORMANCE_CODE_WALLET_TOKEN_ENDPOINT="<exported token_endpoint>" docker compose \
+  -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tunnel.yml up -d --build
+```
+
+**Must be the `cloudflare` profile (plus the tunnel), not plain `docker`** — the conformance suite runs on
+its own remote server and fetches `request_uri` itself, so that URL has to be something *its* server can
+reach. Under plain `docker`, `demo.request-uri-base` resolves to `http://localhost:8090`, which is only
+ever reachable from your own machine; the suite gets a plain connection-refused trying to fetch it. Under
+`cloudflare`, it resolves to `https://verify.irving.au/oid4vp/request`, which the tunnel makes real. (These
+env vars are deliberately wired into `docker-compose.cloudflare.yml`, not the base file — `conformance`/
+`conformancemdoc`/`conformancecode` only exist under this profile at all; setting
+`CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT` under plain `docker` would make Spring Boot infer a broken
+partial `conformance` registration from that one property alone and fail to start. `conformancecode`'s two
+env vars don't have that failure mode — see above — but are still cloudflare-only since the registration
+itself only exists there.)
+
+Then open `https://verify.irving.au/oid4vp/invoke/conformance` (or `.../conformancemdoc`/
+`.../conformancecode`) — not `localhost`, same reasoning — in a browser. Unset, these env vars default to
+empty and the invoke endpoint returns `501` — there's deliberately no way to pass a redirect target as a
+request parameter instead, since that would be an open redirect. Each relying-party registration configures its own fixed
+`wallet-authorization-endpoint` (`Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint`); nothing
+here lets a caller redirect anywhere they choose.
+
 ## Notes
 
-- The Wallet self-issuing its own credential (`DemoCredentialConfig`) is a demo-only shortcut —
-  credential *issuance* is a separate protocol (OpenID for Verifiable Credential Issuance) outside this
-  project's scope. A real Wallet receives credentials from a real Issuer.
-- `IssuerKeyResolver` fetching the issuer's key straight from the Wallet's own `/issuer-jwks` endpoint is
-  also a demo-only simplification (there's no real trust relationship being checked). A real Verifier
-  resolves issuer trust through whatever framework it's deployed under.
+- The Wallet self-issuing its own credentials (`DemoCredentialConfig` for `dc+sd-jwt`,
+  `DemoMdocCredentialConfig` for the `mso_mdoc` mDL) is a demo-only shortcut — credential *issuance* is a
+  separate protocol (OpenID for Verifiable Credential Issuance for SD-JWT VC; ISO 18013-5 issuance for
+  mdoc) outside this project's scope. A real Wallet receives credentials from a real Issuer.
+- `IssuerKeyResolver` resolves the issuer's key two ways, both demo-only simplifications with no real trust
+  relationship being checked: first from the credential's own embedded certificate chain (`x5c` for
+  SD-JWT VC, `x5chain` for mdoc's `IssuerAuth`) — trusting a self-signed leaf certificate outright, no
+  CA/chain validation — this is what lets the demo Verifier accept credentials from external
+  Wallets/issuers, such as those used by the OpenID Foundation conformance suite, falling back to
+  fetching the issuer's key straight from the Wallet's own `/issuer-jwks` endpoint for credentials that
+  carry no certificate chain (only the demo Wallet's own self-issued SD-JWT VC credential, via
+  `DemoCredentialConfig` — every mdoc always carries an `x5chain`). A real Verifier resolves issuer trust
+  through whatever framework it's deployed under.
+- All four registrations (`demo`, `conformance`, `conformancemdoc`, `conformancecode`) use the `x509_hash`
+  Client Identifier Prefix — `client-id: "x509_hash:<base64url(sha256(DER of demo-verifier-signing-key.p12's leaf cert))>"`
+  — rather than `x509_san_dns`, since OpenID4VC HAIP (High Assurance Interoperability Profile) forbids
+  `x509_san_dns`/`verifier_attestation` outright and mandates `x509_hash`. `ExpectedAudienceResolver`
+  (`oid4vp-core`) still handles `x509_san_dns` correctly for any consumer that isn't targeting HAIP — this
+  demo just doesn't exercise that branch anymore. The demo Wallet's `/present` flow fetches an *unsigned*
+  convenience JSON authorization request (`AuthorizeController`) that never carries the signing
+  certificate, so `AuthorizeController` still precomputes the expected response audience into a bespoke
+  `expected_response_audience` field (safe only because that whole JSON endpoint is demo-only) — with
+  `x509_hash` as the client-id this now just mirrors `client_id` verbatim, but the mechanism stays generic.
+- `demo-verifier-signing-key.p12`'s leaf certificate is issued by a throwaway demo CA (also checked into
+  the keystore) rather than being self-signed itself — HAIP-conformant Wallets reject a self-signed leaf.
+  Regenerated via `keytool` (CA keypair → leaf keypair/CSR → CA signs the CSR → both certs imported back
+  into the leaf's keystore entry); if regenerated again, every registration's `client-id` above must be
+  recomputed to match the new leaf's hash.
+- The signed Request Object always carries `aud: "https://self-issued.me/v2"` (`RequestObjectSigner`) —
+  OpenID4VP's Static Discovery convention, since this project never does Dynamic Discovery (resolving a
+  Wallet's own issuer metadata). Nonce/state/transaction-id are 256-bit random tokens
+  (`Oid4vpAuthorizationRequestService`), comfortably above the spec's 128-bit floor. `conformance`'s
+  `client-metadata` declares both `A128GCM` and `A256GCM` under `encrypted_response_enc_values_supported`,
+  as HAIP requires — Nimbus's `ECDHDecrypter` already handles either transparently, so this was a
+  metadata-only change.
+- `conformance`'s response-encryption key is generated fresh per Authorization Request, not a static one —
+  HAIP forbids reusing the same response-encryption public key across requests.
+  `Oid4vpAuthorizationRequestService` generates a keypair (`EphemeralEncryptionKeyGenerator`,
+  `oid4vp-verifier-core`) each time it builds a request for a `direct_post.jwt`/`dc_api.jwt` registration,
+  injects the public half into that request's `client_metadata.jwks`, and saves the private half into an
+  `Oid4vpEphemeralEncryptionKeyRepository` (in-memory by default). `DemoVerifierEncryptionKeyConfig`'s
+  `ResponseDecryptionKeyResolver` just reads keys back out of that same repository by registration id — no
+  static key anywhere anymore. This repository has to be **the same instance** on both the request-building
+  side (`Oid4vpLoginConfigurer.ephemeralEncryptionKeyRepository(...)`, wired in `SecurityConfig`) and the
+  decryption side (`DemoVerifierEncryptionKeyConfig`) — Spring supplies the identical autoconfigured
+  singleton to both by default, but a hand-rolled setup that constructs two separate instances would see
+  every decryption fail with "no key found", since nothing would ever land in the copy being read from.
+- `conformance` and `conformancemdoc` use `request-uri-method: "post"` (a registration property,
+  `RequestUriMethod`/`Oid4vpRelyingPartyRegistration.requestUriMethod`, defaulting to `get` for
+  `demo`/`conformancecode`) — exercises OpenID4VP 1.1 "Request URI Method post":
+  `Oid4vpWalletInvocationFilter` appends `request_uri_method=post` to the invoke redirect, and the Wallet
+  then POSTs (rather than GETs) `/oid4vp/request/{registrationId}`, optionally sending a `wallet_nonce`
+  form field that `Oid4vpRequestObjectFilter` already echoed back into the signed Request Object
+  regardless of this setting — that handling predates this property; the property just makes it get
+  exercised.

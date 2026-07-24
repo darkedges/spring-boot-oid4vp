@@ -2,14 +2,18 @@ package com.darkedges.oid4vp.spring.security.config;
 
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
+import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
 import com.darkedges.oid4vp.spring.security.authentication.Oid4vpAuthorizationResponseAuthenticationProvider;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpAuthorizationRequestRepository;
+import com.darkedges.oid4vp.spring.security.web.InMemoryOid4vpEphemeralEncryptionKeyRepository;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationCodeCallbackFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationRequestService;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpEphemeralEncryptionKeyRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthenticationConverter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthenticationFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiAuthenticationConverter;
@@ -17,6 +21,7 @@ import com.darkedges.oid4vp.spring.security.web.Oid4vpRequestObjectFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpSameDeviceAuthenticationSuccessHandler;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepository;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpWalletInvocationFilter;
 import com.darkedges.oid4vp.verifier.AuthorizationResponseValidator;
 import com.nimbusds.jose.JWSAlgorithm;
 import org.springframework.http.HttpMethod;
@@ -44,6 +49,7 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     private Oid4vpRelyingPartyRegistrationRepository relyingPartyRegistrationRepository;
     private Oid4vpAuthorizationRequestRepository authorizationRequestRepository = new InMemoryOid4vpAuthorizationRequestRepository();
+    private Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository = new InMemoryOid4vpEphemeralEncryptionKeyRepository();
     private final Map<CredentialFormat, PresentationVerifier> presentationVerifiers = new HashMap<>();
     private IssuerKeyResolver issuerKeyResolver;
     private ResponseDecryptionKeyResolver responseDecryptionKeyResolver;
@@ -60,6 +66,13 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private String sameDeviceResultBaseUri;
     private RequestMatcher transactionResultRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpTransactionResultFilter.DEFAULT_RESULT_URI_PATTERN);
+    private String sameDeviceResultRedirectUri;
+    private String walletInvocationRequestUriBase;
+    private RequestMatcher walletInvocationRequestMatcher =
+            PathPatternRequestMatcher.pathPattern(Oid4vpWalletInvocationFilter.DEFAULT_INVOKE_URI_PATTERN);
+    private TokenEndpointClient tokenEndpointClient;
+    private String authorizationCodeSuccessRedirectUri;
+    private RequestMatcher authorizationCodeCallbackRequestMatcher = Oid4vpAuthorizationCodeCallbackFilter.defaultRequestMatcher();
 
     public Oid4vpLoginConfigurer<H> relyingPartyRegistrationRepository(Oid4vpRelyingPartyRegistrationRepository repository) {
         this.relyingPartyRegistrationRepository = repository;
@@ -72,6 +85,16 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     public Oid4vpLoginConfigurer<H> authorizationRequestRepository(Oid4vpAuthorizationRequestRepository repository) {
         this.authorizationRequestRepository = repository;
+        return this;
+    }
+
+    /** Only matters for {@code direct_post.jwt}/{@code dc_api.jwt} registrations (see
+     * {@code Oid4vpAuthorizationRequestService}, which generates a fresh response-encryption key per
+     * request here and saves it into this repository). If the application also builds its
+     * {@code ResponseDecryptionKeyResolver} from a shared instance of this repository — as it must, to
+     * find the keys generated here — pass that <em>same</em> instance to both places. */
+    public Oid4vpLoginConfigurer<H> ephemeralEncryptionKeyRepository(Oid4vpEphemeralEncryptionKeyRepository repository) {
+        this.ephemeralEncryptionKeyRepository = repository;
         return this;
     }
 
@@ -170,6 +193,72 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         return this;
     }
 
+    /**
+     * Once the same-device handoff completes and the {@code SecurityContext} is established, redirect the
+     * End-User's browser here instead of writing the default {@code {}} JSON body — e.g. back to a demo
+     * page so it can re-check {@code /profile} and show a signed-in state. Relative URIs are resolved
+     * against the Verifier's own origin.
+     */
+    public Oid4vpLoginConfigurer<H> sameDeviceResultRedirectUri(String redirectUri) {
+        this.sameDeviceResultRedirectUri = redirectUri;
+        return this;
+    }
+
+    /**
+     * Enables {@code GET /oid4vp/invoke/{registrationId}} ({@link Oid4vpWalletInvocationFilter}):
+     * redirects the End-User's browser to a Wallet's {@code authorization_endpoint} (configured per
+     * relying-party registration, not accepted as a request parameter — see
+     * {@code Oid4vpRelyingPartyRegistration.walletAuthorizationEndpoint}) with {@code client_id} and
+     * {@code request_uri} attached. Requires {@link #relyingPartyRegistrationRepository} and
+     * {@link #requestObjectSigningKeyResolver} to also be configured — an unsigned request has nothing a
+     * real Wallet would trust.
+     *
+     * @param requestUriBase e.g. {@code "https://verifier.example.org/oid4vp/request"} — must match
+     *                       wherever {@link Oid4vpRequestObjectFilter} is actually hosted (see
+     *                       {@link #requestUriPattern}).
+     */
+    public Oid4vpLoginConfigurer<H> walletInvocation(String requestUriBase) {
+        this.walletInvocationRequestUriBase = requestUriBase;
+        return this;
+    }
+
+    /** Overrides the default {@code /oid4vp/invoke/{registrationId}} path pattern used by
+     * {@link #walletInvocation}. */
+    public Oid4vpLoginConfigurer<H> walletInvocationUriPattern(String pathPattern) {
+        this.walletInvocationRequestMatcher = PathPatternRequestMatcher.pathPattern(pathPattern);
+        return this;
+    }
+
+    /**
+     * Enables {@code GET /oid4vp/callback/{registrationId}} ({@link Oid4vpAuthorizationCodeCallbackFilter}):
+     * completes the OAuth 2.0 Authorization Code Grant ({@code response_type=code}) flow for registrations
+     * configured with a {@code CodeFlowConfig} — receives the Wallet's {@code ?code=...&state=...}
+     * redirect, exchanges {@code code} for a Token Response via the supplied client, and authenticates the
+     * resulting {@code vp_token} through the same validation path as {@code direct_post}. Requires
+     * {@link #relyingPartyRegistrationRepository} to also be configured.
+     */
+    public Oid4vpLoginConfigurer<H> authorizationCodeCallback(TokenEndpointClient tokenEndpointClient) {
+        this.tokenEndpointClient = tokenEndpointClient;
+        return this;
+    }
+
+    /** Overrides the default {@code /oid4vp/callback/{registrationId}} path pattern used by
+     * {@link #authorizationCodeCallback}. */
+    public Oid4vpLoginConfigurer<H> authorizationCodeCallbackUriPattern(String pathPattern) {
+        this.authorizationCodeCallbackRequestMatcher = PathPatternRequestMatcher.pathPattern(HttpMethod.GET, pathPattern);
+        return this;
+    }
+
+    /**
+     * Once the Authorization Code Grant's token exchange completes and the {@code SecurityContext} is
+     * established, redirect the End-User's browser here instead of writing the default {@code {}} JSON
+     * body — same idea as {@link #sameDeviceResultRedirectUri}.
+     */
+    public Oid4vpLoginConfigurer<H> authorizationCodeSuccessRedirectUri(String redirectUri) {
+        this.authorizationCodeSuccessRedirectUri = redirectUri;
+        return this;
+    }
+
     @Override
     public void init(H http) {
         if (issuerKeyResolver == null) {
@@ -178,13 +267,20 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         if (presentationVerifiers.isEmpty()) {
             throw new IllegalStateException("at least one presentationVerifier must be configured via .presentationVerifier(...)");
         }
+        if (walletInvocationRequestUriBase != null && relyingPartyRegistrationRepository == null) {
+            throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .walletInvocation(...)");
+        }
+        if (tokenEndpointClient != null && relyingPartyRegistrationRepository == null) {
+            throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .authorizationCodeCallback(...)");
+        }
     }
 
     @Override
     public void configure(H http) {
         AuthorizationResponseValidator validator = new AuthorizationResponseValidator(Map.copyOf(presentationVerifiers));
         ProviderManager authenticationManager = new ProviderManager(
-                new Oid4vpAuthorizationResponseAuthenticationProvider(validator, issuerKeyResolver, clock));
+                new Oid4vpAuthorizationResponseAuthenticationProvider(
+                        validator, issuerKeyResolver, requestObjectSigningKeyResolver, clock));
 
         Oid4vpAuthorizationResponseAuthenticationConverter converter = new Oid4vpAuthorizationResponseAuthenticationConverter(
                 authorizationRequestRepository, requestMatcher, responseDecryptionKeyResolver);
@@ -210,7 +306,8 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
                         "relyingPartyRegistrationRepository must be configured to host request objects via requestObjectSigningKeyResolver(...)");
             }
             Oid4vpAuthorizationRequestService requestService = new Oid4vpAuthorizationRequestService(
-                    relyingPartyRegistrationRepository, authorizationRequestRepository, clock, requestTtl);
+                    relyingPartyRegistrationRepository, authorizationRequestRepository,
+                    ephemeralEncryptionKeyRepository, clock, requestTtl);
             Oid4vpRequestObjectFilter requestObjectFilter = new Oid4vpRequestObjectFilter(
                     requestObjectRequestMatcher, requestService, requestObjectSigningKeyResolver, requestObjectSigningAlgorithm);
             http.addFilterBefore(requestObjectFilter, UsernamePasswordAuthenticationFilter.class);
@@ -218,8 +315,21 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
         if (transactionResultRepository != null) {
             Oid4vpTransactionResultFilter transactionResultFilter =
-                    new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository);
+                    new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository, sameDeviceResultRedirectUri);
             http.addFilterBefore(transactionResultFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
+        if (walletInvocationRequestUriBase != null) {
+            Oid4vpWalletInvocationFilter walletInvocationFilter = new Oid4vpWalletInvocationFilter(
+                    walletInvocationRequestMatcher, relyingPartyRegistrationRepository, walletInvocationRequestUriBase);
+            http.addFilterBefore(walletInvocationFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
+        if (tokenEndpointClient != null) {
+            Oid4vpAuthorizationCodeCallbackFilter authorizationCodeCallbackFilter = new Oid4vpAuthorizationCodeCallbackFilter(
+                    authorizationCodeCallbackRequestMatcher, authenticationManager, authorizationRequestRepository,
+                    relyingPartyRegistrationRepository, tokenEndpointClient, authorizationCodeSuccessRedirectUri);
+            http.addFilterBefore(authorizationCodeCallbackFilter, UsernamePasswordAuthenticationFilter.class);
         }
     }
 
