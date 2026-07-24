@@ -14,19 +14,20 @@ import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Loads a static EC key + 2-certificate chain ({@code demo-verifier-signing-key.p12}, checked into
- * resources: a leaf cert with SANs {@code localhost}/{@code verifier}/{@code verify.irving.au}, issued by
- * a self-signed demo CA — the leaf itself is <em>not</em> self-signed, since HAIP-conformant Wallets
- * reject a self-signed leaf) used to sign the Authorization Request Object hosted at
- * {@code /oid4vp/request/{registrationId}} — required for the {@code x509_hash} Client Identifier Prefix
- * (see {@code application.yml}'s {@code client-id}), since unlike {@code redirect_uri:}, that scheme
- * requires signed requests, verified by the Wallet directly against the leaf certificate carried in the
- * request's {@code x5c} JWS header.
+ * Loads a static EC key + certificate ({@code demo-verifier-signing-key.p12}, checked into resources: a
+ * leaf cert with SANs {@code localhost}/{@code verifier}/{@code verify.irving.au}, issued by a self-signed
+ * demo CA also stored in the same keystore — the leaf itself is <em>not</em> self-signed, since
+ * HAIP-conformant Wallets reject a self-signed leaf) used to sign the Authorization Request Object hosted
+ * at {@code /oid4vp/request/{registrationId}} — required for the {@code x509_hash} Client Identifier
+ * Prefix (see {@code application.yml}'s {@code client-id}), since unlike {@code redirect_uri:}, that
+ * scheme requires signed requests, verified by the Wallet directly against the leaf certificate carried in
+ * the request's {@code x5c} JWS header. The {@code x5c} header carries only the leaf, not the CA: the demo
+ * CA is registered out-of-band as the Wallet/conformance suite's trust anchor, and HAIP's x5c validation
+ * rejects a chain that includes the trust anchor certificate itself.
  *
  * <p>Not a pattern to copy for a real Verifier — a real deployment would use a certificate issued by a CA
  * relying Wallets actually trust, not a throwaway demo CA baked into the jar. If this keystore is ever
@@ -52,17 +53,12 @@ public class DemoVerifierSigningKeyConfig {
         }
 
         ECPrivateKey privateKey = (ECPrivateKey) keyStore.getKey(ALIAS, PASSWORD);
-        Certificate[] chain = keyStore.getCertificateChain(ALIAS);
-        ECPublicKey publicKey = (ECPublicKey) chain[0].getPublicKey();
-        List<Base64> x5c = Arrays.stream(chain)
-                .map(cert -> {
-                    try {
-                        return Base64.encode(cert.getEncoded());
-                    } catch (Exception e) {
-                        throw new IllegalStateException(e);
-                    }
-                })
-                .toList();
+        // Leaf only, not the full chain: the demo CA is registered out-of-band as the conformance suite's
+        // trust anchor, and HAIP's x5c validation rejects a chain that includes the trust anchor itself
+        // (OID4VP-1FINAL-5.9.3 ValidateRequestObjectSignatureAgainstX5cHeader).
+        Certificate leaf = keyStore.getCertificateChain(ALIAS)[0];
+        ECPublicKey publicKey = (ECPublicKey) leaf.getPublicKey();
+        List<Base64> x5c = List.of(Base64.encode(leaf.getEncoded()));
 
         return new ECKey.Builder(Curve.P_256, publicKey)
                 .privateKey(privateKey)
