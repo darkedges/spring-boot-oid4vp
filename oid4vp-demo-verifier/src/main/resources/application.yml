@@ -41,6 +41,23 @@ oid4vp:
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
           "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
           "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
+      # Local, bare-metal-friendly counterpart to "demo" for mso_mdoc — always direct_post.jwt (encrypted),
+      # since mdoc's SessionTranscript needs the mdocGeneratedNonce that only travels via the response
+      # JWE's apu header (see README: "Extra relying parties for conformance testing"). Unlike
+      # "conformance"/"conformancemdoc" (cloudflare-only, suite-facing), this exists so the local demo
+      # Wallet <-> demo Verifier round trip can be exercised for mdoc without needing the conformance suite
+      # or a Cloudflare tunnel at all.
+      demomdoc:
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
+        response-uri: "http://localhost:8090/login/oid4vp/direct-post/demomdoc"
+        response-mode: "direct_post.jwt"
+        dcql-query: >
+          {"credentials":[{"id":"mdl","format":"mso_mdoc",
+          "meta":{"doctype_value":"org.iso.18013.5.1.mDL"},
+          "claims":[{"path":["org.iso.18013.5.1","given_name"]},{"path":["org.iso.18013.5.1","family_name"]}]}]}
+        client-metadata: >
+          {"encrypted_response_enc_values_supported":["A128GCM","A256GCM"],
+          "vp_formats_supported":{"mso_mdoc":{"deviceauth_alg_values":[-7],"issuerauth_alg_values":[-7]}}}
 
 logging:
   level:

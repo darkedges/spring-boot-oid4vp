@@ -76,7 +76,9 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
         Map<String, List<VerifiedPresentation>> verified;
         try {
             verified = validator.validate(
-                    requestContext.dcqlQuery(), vpToken, requestContext.nonce(), expectedAudience, issuerKeyResolver, clock);
+                    requestContext.dcqlQuery(), vpToken, requestContext.nonce(), expectedAudience,
+                    requestContext.clientId().fullClientId(), requestContext.responseUri().toString(),
+                    token.mdocGeneratedNonce(), issuerKeyResolver, clock);
         } catch (Oid4vpException e) {
             throw new Oid4vpAuthenticationException(e.errorCode(), e.getMessage(), e);
         }

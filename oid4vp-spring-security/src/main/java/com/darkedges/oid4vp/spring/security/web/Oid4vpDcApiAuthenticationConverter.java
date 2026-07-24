@@ -60,13 +60,16 @@ public class Oid4vpDcApiAuthenticationConverter implements AuthenticationConvert
         String error;
         String errorDescription;
         String vpTokenJson;
+        String mdocGeneratedNonce = null;
 
         if (body.hasNonNull("response")) {
-            JsonNode decrypted = decryptResponse(request, body.get("response").asText());
+            String responseJwe = body.get("response").asText();
+            JsonNode decrypted = decryptResponse(request, responseJwe);
             state = decrypted.path("state").asText(null);
             error = decrypted.hasNonNull("error") ? decrypted.get("error").asText() : null;
             errorDescription = decrypted.hasNonNull("error_description") ? decrypted.get("error_description").asText() : null;
             vpTokenJson = decrypted.has("vp_token") ? decrypted.get("vp_token").toString() : null;
+            mdocGeneratedNonce = ResponseDecryptor.extractMdocGeneratedNonce(responseJwe).orElse(null);
         } else {
             state = body.path("state").asText(null);
             error = body.hasNonNull("error") ? body.get("error").asText() : null;
@@ -90,7 +93,7 @@ public class Oid4vpDcApiAuthenticationConverter implements AuthenticationConvert
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"vp_token\"");
         }
 
-        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson, audienceOverride);
+        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson, audienceOverride, mdocGeneratedNonce);
     }
 
     private JsonNode decryptResponse(HttpServletRequest request, String responseJwe) {

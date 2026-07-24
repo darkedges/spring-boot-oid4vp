@@ -117,7 +117,8 @@ class JwtVcJsonVerifierTest {
         SignedJWT vp = signedVp(holderKey, vc, NONCE, AUDIENCE);
 
         PresentationVerificationParams params = new PresentationVerificationParams(
-                query(), NONCE, AUDIENCE, resolverFor(issuerKey, holderKey), fixedClock());
+                query(), NONCE, AUDIENCE, AUDIENCE, "https://verifier.example.org/response", Optional.empty(),
+                resolverFor(issuerKey, holderKey), fixedClock());
 
         VerifiedPresentation result = new JwtVcJsonVerifier().verify(
                 new PresentationEntry.StringPresentation(vp.serialize()), params);
@@ -143,7 +144,8 @@ class JwtVcJsonVerifierTest {
         SignedJWT vp = signedVp(holderKey, vc, NONCE, AUDIENCE);
 
         PresentationVerificationParams params = new PresentationVerificationParams(
-                query(), "wrong-nonce", AUDIENCE, resolverFor(issuerKey, holderKey), fixedClock());
+                query(), "wrong-nonce", AUDIENCE, AUDIENCE, "https://verifier.example.org/response", Optional.empty(),
+                resolverFor(issuerKey, holderKey), fixedClock());
 
         assertThatThrownBy(() -> new JwtVcJsonVerifier().verify(new PresentationEntry.StringPresentation(vp.serialize()), params))
                 .isInstanceOf(NonceMismatchException.class);
@@ -157,7 +159,8 @@ class JwtVcJsonVerifierTest {
         SignedJWT vp = signedVp(holderKey, vc, NONCE, AUDIENCE);
 
         PresentationVerificationParams params = new PresentationVerificationParams(
-                query(), NONCE, "someone-else", resolverFor(issuerKey, holderKey), fixedClock());
+                query(), NONCE, "someone-else", "someone-else", "https://verifier.example.org/response", Optional.empty(),
+                resolverFor(issuerKey, holderKey), fixedClock());
 
         assertThatThrownBy(() -> new JwtVcJsonVerifier().verify(new PresentationEntry.StringPresentation(vp.serialize()), params))
                 .isInstanceOf(AudienceMismatchException.class);
@@ -181,7 +184,8 @@ class JwtVcJsonVerifierTest {
             default -> Optional.empty();
         };
 
-        PresentationVerificationParams params = new PresentationVerificationParams(query(), NONCE, AUDIENCE, resolver, fixedClock());
+        PresentationVerificationParams params = new PresentationVerificationParams(
+                query(), NONCE, AUDIENCE, AUDIENCE, "https://verifier.example.org/response", Optional.empty(), resolver, fixedClock());
 
         assertThatThrownBy(() -> new JwtVcJsonVerifier().verify(new PresentationEntry.StringPresentation(vp.serialize()), params))
                 .isInstanceOf(JwtVcJsonVerificationException.class);

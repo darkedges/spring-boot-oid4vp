@@ -41,11 +41,13 @@ import java.util.Optional;
  * Wires {@link Oid4vpLoginConfigurer} into the security filter chain: {@code /oid4vp/**} (the authorize
  * and same-device result endpoints) and {@code /login/oid4vp/**} (the direct_post/dc_api response
  * endpoints, per the library's default path patterns) are open to the Wallet; everything else requires a
- * validated presentation. The issuer key is resolved first from the credential's own embedded
- * {@code x5c} certificate chain (self-signed, no CA validation — demo-only), falling back to fetching
- * the demo Wallet's own {@code /issuer-jwks} endpoint for credentials that carry no {@code x5c} (only
- * our own demo Wallet's self-issued credential). Real deployments would use actual Issuer trust
- * configuration instead.
+ * validated presentation. Two {@code PresentationVerifier}s are registered — {@code dc+sd-jwt}
+ * ({@code sdJwtVcPresentationVerifier}) and {@code mso_mdoc} ({@code mdocPresentationVerifier}) — and the
+ * issuer key for either is resolved first from the credential's own embedded certificate chain (SD-JWT
+ * VC's {@code x5c} / mdoc's MSO {@code x5chain}; self-signed, no CA validation — demo-only), falling back
+ * to fetching the demo Wallet's own {@code /issuer-jwks} endpoint for credentials that carry no chain
+ * (only our own demo Wallet's self-issued SD-JWT VC credential). Real deployments would use actual Issuer
+ * trust configuration instead.
  */
 @Configuration
 public class SecurityConfig {
@@ -65,6 +67,7 @@ public class SecurityConfig {
             Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository,
             Oid4vpTransactionResultRepository transactionResultRepository,
             @Qualifier("sdJwtVcPresentationVerifier") PresentationVerifier sdJwtVcPresentationVerifier,
+            @Qualifier("mdocPresentationVerifier") PresentationVerifier mdocPresentationVerifier,
             IssuerKeyResolver issuerKeyResolver,
             RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
             ResponseDecryptionKeyResolver responseDecryptionKeyResolver,
@@ -84,6 +87,7 @@ public class SecurityConfig {
                         // reads from — see Oid4vpLoginConfigurer.ephemeralEncryptionKeyRepository's Javadoc.
                         .ephemeralEncryptionKeyRepository(ephemeralEncryptionKeyRepository)
                         .presentationVerifier(sdJwtVcPresentationVerifier)
+                        .presentationVerifier(mdocPresentationVerifier)
                         .issuerKeyResolver(issuerKeyResolver)
                         .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)
                         .requestObjectSigningAlgorithm(JWSAlgorithm.ES256)

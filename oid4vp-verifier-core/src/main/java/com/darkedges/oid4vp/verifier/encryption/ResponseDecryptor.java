@@ -16,8 +16,10 @@ import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jose.jwk.OctetKeyPair;
 import com.nimbusds.jose.jwk.RSAKey;
 
+import java.nio.charset.StandardCharsets;
 import java.text.ParseException;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Decrypts an encrypted Authorization Response (the {@code response} JWT of {@code direct_post.jwt} /
@@ -62,6 +64,24 @@ public final class ResponseDecryptor {
         } catch (Exception e) {
             throw new Oid4vpException(Oid4vpErrorCode.INVALID_REQUEST, "decrypted Authorization Response payload is not valid JSON", e);
         }
+    }
+
+    /**
+     * The Wallet-generated nonce mdoc's {@code OID4VPHandover} requires (ISO 18013-7 Annex B / OpenID4VP's
+     * mdoc appendix) — carried in the encrypted response JWE's {@code apu} header (RFC 7518 §4.6.1.2,
+     * base64url), the only channel it has back to the Verifier since it has to be known before the
+     * response is even decrypted. Reads the header only — no key/decryption needed. Empty for a
+     * non-encrypted response, or one with no {@code apu} (i.e. every non-mdoc presentation).
+     */
+    public static Optional<String> extractMdocGeneratedNonce(String jwe) {
+        JWEObject jweObject;
+        try {
+            jweObject = JWEObject.parse(jwe);
+        } catch (ParseException e) {
+            throw new Oid4vpException(Oid4vpErrorCode.INVALID_REQUEST, "\"response\" is not a valid JWE", e);
+        }
+        var apu = jweObject.getHeader().getAgreementPartyUInfo();
+        return apu == null ? Optional.empty() : Optional.of(new String(apu.decode(), StandardCharsets.UTF_8));
     }
 
     private static JWK selectKey(JWKSet jwkSet, String kid) {

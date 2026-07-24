@@ -28,6 +28,10 @@
       <artifactId>oid4vp-format-sdjwt-vc</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-format-mdoc</artifactId>
+    </dependency>
+    <dependency>
       <groupId>com.nimbusds</groupId>
       <artifactId>nimbus-jose-jwt</artifactId>
     </dependency>

@@ -12,6 +12,7 @@ import com.darkedges.oid4vp.core.request.VerifierInfoEntry;
 import com.darkedges.oid4vp.core.request.VerifierInfoReader;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.jwtvcjson.JwtVcJsonVerifier;
+import com.darkedges.oid4vp.mdoc.MdocVerifier;
 import com.darkedges.oid4vp.sdjwt.SdJwtVerifier;
 import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
 import com.darkedges.oid4vp.spring.security.registration.CodeFlowConfig;
@@ -78,6 +79,12 @@ public class Oid4vpVerifierAutoConfiguration {
     @ConditionalOnMissingBean(name = "jwtVcJsonPresentationVerifier")
     public PresentationVerifier jwtVcJsonPresentationVerifier() {
         return new JwtVcJsonVerifier();
+    }
+
+    @Bean(name = "mdocPresentationVerifier")
+    @ConditionalOnMissingBean(name = "mdocPresentationVerifier")
+    public PresentationVerifier mdocPresentationVerifier() {
+        return new MdocVerifier();
     }
 
     @Bean

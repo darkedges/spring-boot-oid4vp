@@ -4,15 +4,22 @@ import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.core.dcql.DcqlQuery;
 import com.darkedges.oid4vp.core.dcql.DcqlQueryReader;
 import com.darkedges.oid4vp.core.dcql.eval.CredentialStore;
+import com.darkedges.oid4vp.core.dcql.eval.HeldCredential;
+import com.darkedges.oid4vp.core.request.ClientMetadata;
+import com.darkedges.oid4vp.core.request.ClientMetadataReader;
 import com.darkedges.oid4vp.core.response.VpToken;
 import com.darkedges.oid4vp.core.response.VpTokenWriter;
 import com.darkedges.oid4vp.wallet.HolderKeyResolver;
+import com.darkedges.oid4vp.wallet.MdocPresentationBuilderAdapter;
 import com.darkedges.oid4vp.wallet.PresentationBuildParams;
+import com.darkedges.oid4vp.wallet.PresentationBuilder;
+import com.darkedges.oid4vp.wallet.ResponseEncryptor;
 import com.darkedges.oid4vp.wallet.SdJwtVcPresentationBuilderAdapter;
 import com.darkedges.oid4vp.wallet.WalletAuthorizationResponseBuilder;
 import com.darkedges.oid4vp.wallet.WalletAuthorizationResponseResult;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.nimbusds.jose.crypto.ECDSASigner;
 import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.jwk.JWKSet;
@@ -30,7 +37,11 @@ import org.springframework.web.client.RestClient;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
+import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.time.Clock;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 
@@ -39,22 +50,28 @@ import java.util.Optional;
  * can resolve it), and, on request, fetch an Authorization Request from a Verifier, evaluate it against
  * the local credential store, and POST the resulting {@code vp_token} to the Verifier's
  * {@code response_uri} — the same {@link WalletAuthorizationResponseBuilder} orchestration a real Wallet
- * would use, just triggered over HTTP instead of from a UI.
+ * would use, just triggered over HTTP instead of from a UI. For a {@code direct_post.jwt} registration
+ * (required for mdoc, since {@code SessionTranscript} needs a {@code mdocGeneratedNonce} with nowhere else
+ * to travel back to the Verifier), encrypts the response instead of posting it in the clear.
  */
 @RestController
 public class WalletController {
 
     private static final Logger log = LoggerFactory.getLogger(WalletController.class);
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final ECKey issuerKey;
     private final ECKey holderKey;
+    private final KeyPair mdocDeviceKeyPair;
     private final CredentialStore credentialStore;
     private final RestClient restClient = RestClient.create();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public WalletController(ECKey demoIssuerKey, ECKey demoHolderKey, CredentialStore demoCredentialStore) {
+    public WalletController(
+            ECKey demoIssuerKey, ECKey demoHolderKey, KeyPair demoMdocDeviceKeyPair, CredentialStore demoCredentialStore) {
         this.issuerKey = demoIssuerKey;
         this.holderKey = demoHolderKey;
+        this.mdocDeviceKeyPair = demoMdocDeviceKeyPair;
         this.credentialStore = demoCredentialStore;
     }
 
@@ -80,23 +97,38 @@ public class WalletController {
         JsonNode expectedAudience = request.get("expected_response_audience");
         String audience = expectedAudience != null && !expectedAudience.isNull()
                 ? expectedAudience.asText() : request.get("client_id").asText();
+        String clientId = request.get("client_id").asText();
         String nonce = request.get("nonce").asText();
         String state = request.get("state").asText();
         String responseUri = request.get("response_uri").asText();
         DcqlQuery dcqlQuery = DcqlQueryReader.read(request.get("dcql_query"));
 
-        WalletAuthorizationResponseBuilder builder = new WalletAuthorizationResponseBuilder(
-                Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVcPresentationBuilderAdapter()));
-        HolderKeyResolver holderKeyResolver = credential -> {
-            try {
-                return Optional.of(new ECDSASigner(holderKey));
-            } catch (com.nimbusds.jose.JOSEException e) {
-                throw new IllegalStateException(e);
+        String responseMode = request.hasNonNull("response_mode") ? request.get("response_mode").asText() : "direct_post";
+        boolean encryptedResponse = responseMode.endsWith(".jwt");
+        Optional<String> mdocGeneratedNonce = encryptedResponse ? Optional.of(randomNonce()) : Optional.empty();
+
+        WalletAuthorizationResponseBuilder builder = new WalletAuthorizationResponseBuilder(Map.of(
+                CredentialFormat.DC_SD_JWT, (PresentationBuilder) new SdJwtVcPresentationBuilderAdapter(),
+                CredentialFormat.MSO_MDOC, new MdocPresentationBuilderAdapter()));
+        HolderKeyResolver holderKeyResolver = new HolderKeyResolver() {
+            @Override
+            public Optional<com.nimbusds.jose.JWSSigner> resolveSigner(HeldCredential credential) {
+                try {
+                    return Optional.of(new ECDSASigner(holderKey));
+                } catch (com.nimbusds.jose.JOSEException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
+
+            @Override
+            public Optional<PrivateKey> resolvePrivateKey(HeldCredential credential) {
+                return Optional.of(mdocDeviceKeyPair.getPrivate());
             }
         };
 
         WalletAuthorizationResponseResult result = builder.build(
-                dcqlQuery, credentialStore, new PresentationBuildParams(nonce, audience, holderKeyResolver, Clock.systemUTC()));
+                dcqlQuery, credentialStore,
+                new PresentationBuildParams(nonce, audience, clientId, responseUri, mdocGeneratedNonce, holderKeyResolver, Clock.systemUTC()));
 
         if (result instanceof WalletAuthorizationResponseResult.Declined declined) {
             log.warn("Declining: {}", declined.reason());
@@ -108,8 +140,11 @@ public class WalletController {
         String vpTokenJson = mapper.writeValueAsString(VpTokenWriter.write(vpToken));
         log.info("Posting vp_token to {}", responseUri);
 
-        String formBody = "vp_token=" + URLEncoder.encode(vpTokenJson, StandardCharsets.UTF_8)
-                + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
+        String formBody = encryptedResponse
+                ? "response=" + URLEncoder.encode(
+                        buildEncryptedResponse(request, vpTokenJson, state, mdocGeneratedNonce), StandardCharsets.UTF_8)
+                : "vp_token=" + URLEncoder.encode(vpTokenJson, StandardCharsets.UTF_8)
+                        + "&state=" + URLEncoder.encode(state, StandardCharsets.UTF_8);
 
         String verifierResponse = restClient.post()
                 .uri(responseUri)
@@ -120,6 +155,25 @@ public class WalletController {
 
         log.info("Verifier responded: {}", verifierResponse);
         return ResponseEntity.ok(verifierResponse);
+    }
+
+    private String buildEncryptedResponse(
+            JsonNode request, String vpTokenJson, String state, Optional<String> mdocGeneratedNonce) throws Exception {
+        ClientMetadata clientMetadata = ClientMetadataReader.read(request.get("client_metadata"));
+        JsonNode jwks = clientMetadata.jwks()
+                .orElseThrow(() -> new IllegalStateException("direct_post.jwt requires client_metadata.jwks"));
+
+        ObjectNode payload = mapper.createObjectNode();
+        payload.set("vp_token", mapper.readTree(vpTokenJson));
+        payload.put("state", state);
+
+        return ResponseEncryptor.encrypt(payload, jwks, clientMetadata.encryptedResponseEncValuesSupportedOrDefault(), mdocGeneratedNonce);
+    }
+
+    private static String randomNonce() {
+        byte[] bytes = new byte[16];
+        RANDOM.nextBytes(bytes);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
     }
 
     public record PresentRequest(String verifierAuthorizeUrl) {}

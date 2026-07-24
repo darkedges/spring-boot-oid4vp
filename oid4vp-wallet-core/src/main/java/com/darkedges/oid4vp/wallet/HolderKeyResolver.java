@@ -3,6 +3,7 @@ package com.darkedges.oid4vp.wallet;
 import com.darkedges.oid4vp.core.dcql.eval.HeldCredential;
 import com.nimbusds.jose.JWSSigner;
 
+import java.security.PrivateKey;
 import java.util.Optional;
 
 /**
@@ -18,4 +19,14 @@ import java.util.Optional;
 public interface HolderKeyResolver {
 
     Optional<JWSSigner> resolveSigner(HeldCredential credential);
+
+    /**
+     * Resolves the raw {@link PrivateKey} behind a held credential's holder-binding key, for a signing
+     * scheme that can't go through {@link JWSSigner}'s JOSE-shaped interface — mdoc's {@code DeviceAuth}
+     * (a COSE_Sign1 built over CBOR bytes via plain {@code java.security.Signature}) is the only one so
+     * far. Defaults to empty; only implementations backing mdoc credentials need to override it.
+     */
+    default Optional<PrivateKey> resolvePrivateKey(HeldCredential credential) {
+        return Optional.empty();
+    }
 }

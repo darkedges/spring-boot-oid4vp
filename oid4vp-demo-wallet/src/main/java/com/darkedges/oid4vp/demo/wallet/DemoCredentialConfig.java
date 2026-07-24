@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.demo.wallet;
 
 import com.darkedges.oid4vp.core.dcql.eval.CredentialStore;
+import com.darkedges.oid4vp.mdoc.MdocHeldCredential;
 import com.darkedges.oid4vp.sdjwt.Disclosure;
 import com.darkedges.oid4vp.sdjwt.SdJwtVcHeldCredential;
 import com.fasterxml.jackson.databind.node.TextNode;
@@ -76,8 +77,8 @@ public class DemoCredentialConfig {
     }
 
     @Bean
-    public CredentialStore demoCredentialStore(SdJwtVcHeldCredential demoCredential) {
-        return CredentialStore.of(List.of(demoCredential));
+    public CredentialStore demoCredentialStore(SdJwtVcHeldCredential demoCredential, MdocHeldCredential demoMdocCredential) {
+        return CredentialStore.of(List.of(demoCredential, demoMdocCredential));
     }
 
     private static String randomSalt() {

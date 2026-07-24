@@ -14,6 +14,10 @@ import java.util.Optional;
  * @implNote {@code audienceOverride} exists for the Digital Credentials API: since there is no
  * {@code client_id}-based channel there, the expected audience is {@code origin:<origin>} instead of the
  * Verifier's Client Identifier (OpenID4VP 1.1, "Request" under "OpenID4VP over the Digital Credentials API").
+ * {@code mdocGeneratedNonce} — see
+ * {@link com.darkedges.oid4vp.core.response.PresentationVerificationParams#mdocGeneratedNonce()} — is
+ * only ever present for a successfully decrypted response whose JWE carried an {@code apu} header;
+ * meaningless (and always empty) on an error token, since there's no presentation to verify.
  */
 public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuthenticationToken {
 
@@ -22,41 +26,43 @@ public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuth
     private final String error;
     private final String errorDescription;
     private final String audienceOverride;
+    private final String mdocGeneratedNonce;
+
+    private Oid4vpAuthorizationResponseAuthenticationToken(
+            Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String error, String errorDescription,
+            String audienceOverride, String mdocGeneratedNonce) {
+        super(AuthorityUtils.NO_AUTHORITIES);
+        this.requestContext = requestContext;
+        this.vpTokenJson = vpTokenJson;
+        this.error = error;
+        this.errorDescription = errorDescription;
+        this.audienceOverride = audienceOverride;
+        this.mdocGeneratedNonce = mdocGeneratedNonce;
+        setAuthenticated(false);
+    }
 
     public Oid4vpAuthorizationResponseAuthenticationToken(Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson) {
-        this(requestContext, vpTokenJson, null);
+        this(requestContext, vpTokenJson, null, null, null, null);
     }
 
     public Oid4vpAuthorizationResponseAuthenticationToken(
             Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String audienceOverride) {
-        super(AuthorityUtils.NO_AUTHORITIES);
-        this.requestContext = requestContext;
-        this.vpTokenJson = vpTokenJson;
-        this.error = null;
-        this.errorDescription = null;
-        this.audienceOverride = audienceOverride;
-        setAuthenticated(false);
+        this(requestContext, vpTokenJson, null, null, audienceOverride, null);
+    }
+
+    public Oid4vpAuthorizationResponseAuthenticationToken(
+            Oid4vpAuthorizationRequestContext requestContext, String vpTokenJson, String audienceOverride, String mdocGeneratedNonce) {
+        this(requestContext, vpTokenJson, null, null, audienceOverride, mdocGeneratedNonce);
     }
 
     public static Oid4vpAuthorizationResponseAuthenticationToken ofError(
             Oid4vpAuthorizationRequestContext requestContext, String error, String errorDescription) {
-        return new Oid4vpAuthorizationResponseAuthenticationToken(requestContext, error, errorDescription, null);
+        return ofError(requestContext, error, errorDescription, null);
     }
 
     public static Oid4vpAuthorizationResponseAuthenticationToken ofError(
             Oid4vpAuthorizationRequestContext requestContext, String error, String errorDescription, String audienceOverride) {
-        return new Oid4vpAuthorizationResponseAuthenticationToken(requestContext, error, errorDescription, audienceOverride);
-    }
-
-    private Oid4vpAuthorizationResponseAuthenticationToken(
-            Oid4vpAuthorizationRequestContext requestContext, String error, String errorDescription, String audienceOverride) {
-        super(AuthorityUtils.NO_AUTHORITIES);
-        this.requestContext = requestContext;
-        this.vpTokenJson = null;
-        this.error = error;
-        this.errorDescription = errorDescription;
-        this.audienceOverride = audienceOverride;
-        setAuthenticated(false);
+        return new Oid4vpAuthorizationResponseAuthenticationToken(requestContext, null, error, errorDescription, audienceOverride, null);
     }
 
     public Oid4vpAuthorizationRequestContext requestContext() {
@@ -79,6 +85,10 @@ public class Oid4vpAuthorizationResponseAuthenticationToken extends AbstractAuth
      * empty (the Verifier's own Client Identifier is used as the expected audience). */
     public Optional<String> audienceOverride() {
         return Optional.ofNullable(audienceOverride);
+    }
+
+    public Optional<String> mdocGeneratedNonce() {
+        return Optional.ofNullable(mdocGeneratedNonce);
     }
 
     @Override

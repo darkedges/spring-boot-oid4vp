@@ -17,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Validates a full Authorization Response's {@code vp_token} against the {@link DcqlQuery} it is
@@ -37,6 +38,9 @@ public final class AuthorizationResponseValidator {
             VpToken vpToken,
             String expectedNonce,
             String expectedAudience,
+            String clientId,
+            String responseUri,
+            Optional<String> mdocGeneratedNonce,
             IssuerKeyResolver issuerKeyResolver,
             Clock clock) {
         DcqlResponseValidator.validate(query, vpToken);
@@ -54,8 +58,9 @@ public final class AuthorizationResponseValidator {
                         "no PresentationVerifier registered for format: " + credentialQuery.format());
             }
 
-            PresentationVerificationParams params =
-                    new PresentationVerificationParams(credentialQuery, expectedNonce, expectedAudience, issuerKeyResolver, clock);
+            PresentationVerificationParams params = new PresentationVerificationParams(
+                    credentialQuery, expectedNonce, expectedAudience, clientId, responseUri,
+                    mdocGeneratedNonce, issuerKeyResolver, clock);
 
             List<VerifiedPresentation> verified = new ArrayList<>();
             for (PresentationEntry presentationEntry : entry.getValue()) {

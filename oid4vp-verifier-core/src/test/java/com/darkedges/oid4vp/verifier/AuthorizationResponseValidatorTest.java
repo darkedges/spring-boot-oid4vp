@@ -89,6 +89,7 @@ class AuthorizationResponseValidatorTest {
                 query, vpToken,
                 keyBindingNonce(),
                 verifierIdentifier(),
+                verifierIdentifier(), "https://verifier.example.org/response", Optional.empty(),
                 issuerKeyResolver(), fixedClock());
 
         assertThat(result).containsOnlyKeys("my_credential");
@@ -106,7 +107,8 @@ class AuthorizationResponseValidatorTest {
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
 
         assertThatThrownBy(() -> validator.validate(
-                query, vpToken, "nonce", "aud", (issuer, keyId, certificateChain) -> Optional.empty(), fixedClock()))
+                query, vpToken, "nonce", "aud", "aud", "https://verifier.example.org/response", Optional.empty(),
+                (issuer, keyId, certificateChain) -> Optional.empty(), fixedClock()))
                 .isInstanceOf(Oid4vpException.class);
     }
 
@@ -119,7 +121,8 @@ class AuthorizationResponseValidatorTest {
         AuthorizationResponseValidator validator = new AuthorizationResponseValidator(Map.of());
 
         assertThatThrownBy(() -> validator.validate(
-                query, vpToken, "nonce", "aud", (issuer, keyId, certificateChain) -> Optional.empty(), fixedClock()))
+                query, vpToken, "nonce", "aud", "aud", "https://verifier.example.org/response", Optional.empty(),
+                (issuer, keyId, certificateChain) -> Optional.empty(), fixedClock()))
                 .isInstanceOf(Oid4vpException.class)
                 .satisfies(e -> assertThat(((Oid4vpException) e).errorCode())
                         .isEqualTo(com.darkedges.oid4vp.core.response.Oid4vpErrorCode.VP_FORMATS_NOT_SUPPORTED));
@@ -140,6 +143,7 @@ class AuthorizationResponseValidatorTest {
                 query, vpToken,
                 keyBindingNonce(),
                 verifierIdentifier(),
+                verifierIdentifier(), "https://verifier.example.org/response", Optional.empty(),
                 issuerKeyResolver(), fixedClock());
 
         assertThat(result).containsOnlyKeys("option_b");

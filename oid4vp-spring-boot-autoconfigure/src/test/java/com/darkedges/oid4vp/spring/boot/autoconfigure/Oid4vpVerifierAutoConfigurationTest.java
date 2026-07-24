@@ -4,6 +4,7 @@ import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.core.request.ClientIdentifierPrefix;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.jwtvcjson.JwtVcJsonVerifier;
+import com.darkedges.oid4vp.mdoc.MdocVerifier;
 import com.darkedges.oid4vp.sdjwt.SdJwtVerifier;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistration;
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
@@ -40,8 +41,11 @@ class Oid4vpVerifierAutoConfigurationTest {
             assertThat(context).hasBean("jwtVcJsonPresentationVerifier");
             assertThat(context.getBean("jwtVcJsonPresentationVerifier", PresentationVerifier.class))
                     .isInstanceOf(JwtVcJsonVerifier.class);
+            assertThat(context).hasBean("mdocPresentationVerifier");
+            assertThat(context.getBean("mdocPresentationVerifier", PresentationVerifier.class))
+                    .isInstanceOf(MdocVerifier.class);
             assertThat(context.getBeanProvider(PresentationVerifier.class).stream().map(PresentationVerifier::format))
-                    .containsExactlyInAnyOrder(CredentialFormat.DC_SD_JWT, CredentialFormat.JWT_VC_JSON);
+                    .containsExactlyInAnyOrder(CredentialFormat.DC_SD_JWT, CredentialFormat.JWT_VC_JSON, CredentialFormat.MSO_MDOC);
 
             Oid4vpRelyingPartyRegistrationRepository registrations = context.getBean(Oid4vpRelyingPartyRegistrationRepository.class);
             Oid4vpRelyingPartyRegistration demo = registrations.findByRegistrationId("demo").orElseThrow();

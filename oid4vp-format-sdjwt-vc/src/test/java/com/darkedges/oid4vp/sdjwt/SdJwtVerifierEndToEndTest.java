@@ -51,6 +51,9 @@ class SdJwtVerifierEndToEndTest {
                 query,
                 SdJwtVcldFixture.keyBindingNonce(),
                 SdJwtVcldFixture.verifierIdentifier(),
+                SdJwtVcldFixture.verifierIdentifier(),
+                "https://verifier.example.org/response",
+                Optional.empty(),
                 issuerKeyResolver,
                 clock);
 
@@ -79,7 +82,8 @@ class SdJwtVerifierEndToEndTest {
         Clock clock = Clock.fixed(Instant.ofEpochSecond(1744743394L), ZoneOffset.UTC);
 
         PresentationVerificationParams params = new PresentationVerificationParams(
-                query, "wrong-nonce", SdJwtVcldFixture.verifierIdentifier(), issuerKeyResolver, clock);
+                query, "wrong-nonce", SdJwtVcldFixture.verifierIdentifier(), SdJwtVcldFixture.verifierIdentifier(),
+                "https://verifier.example.org/response", Optional.empty(), issuerKeyResolver, clock);
 
         org.assertj.core.api.Assertions.assertThatThrownBy(
                         () -> new SdJwtVerifier().verify(new PresentationEntry.StringPresentation(presentation), params))

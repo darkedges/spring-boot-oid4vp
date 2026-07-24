@@ -23,6 +23,7 @@
     <junit-bom.version>5.13.1</junit-bom.version>
     <assertj.version>3.27.6</assertj.version>
     <snakeyaml.version>2.5</snakeyaml.version>
+    <cbor.version>0.9</cbor.version>
   </properties>
 
   <modules>
@@ -30,6 +31,7 @@
     <module>oid4vp-test-fixtures</module>
     <module>oid4vp-format-sdjwt-vc</module>
     <module>oid4vp-format-jwt-vc-json</module>
+    <module>oid4vp-format-mdoc</module>
     <module>oid4vp-verifier-core</module>
     <module>oid4vp-wallet-core</module>
     <module>oid4vp-spring-security</module>
@@ -70,6 +72,11 @@
         <artifactId>snakeyaml</artifactId>
         <version>${snakeyaml.version}</version>
       </dependency>
+      <dependency>
+        <groupId>co.nstant.in</groupId>
+        <artifactId>cbor</artifactId>
+        <version>${cbor.version}</version>
+      </dependency>
 
       <dependency>
         <groupId>com.darkedges.oid4vp</groupId>
@@ -89,6 +96,11 @@
       <dependency>
         <groupId>com.darkedges.oid4vp</groupId>
         <artifactId>oid4vp-format-jwt-vc-json</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-format-mdoc</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

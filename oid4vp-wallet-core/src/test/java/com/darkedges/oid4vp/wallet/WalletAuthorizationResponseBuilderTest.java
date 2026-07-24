@@ -107,7 +107,7 @@ class WalletAuthorizationResponseBuilderTest {
                 new WalletAuthorizationResponseBuilder(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVcPresentationBuilderAdapter()));
 
         WalletAuthorizationResponseResult result = walletBuilder.build(
-                requestGivenNameAndFamilyName(), store, new PresentationBuildParams(nonce, audience, holderKeyResolver, fixedClock()));
+                requestGivenNameAndFamilyName(), store, new PresentationBuildParams(nonce, audience, audience, "https://verifier.example/response", Optional.empty(), holderKeyResolver, fixedClock()));
 
         assertThat(result).isInstanceOf(WalletAuthorizationResponseResult.Built.class);
         VpToken vpToken = ((WalletAuthorizationResponseResult.Built) result).vpToken();
@@ -120,7 +120,8 @@ class WalletAuthorizationResponseBuilderTest {
                 new AuthorizationResponseValidator(Map.of(CredentialFormat.DC_SD_JWT, new SdJwtVerifier()));
 
         Map<String, List<VerifiedPresentation>> verified =
-                validator.validate(requestGivenNameAndFamilyName(), vpToken, nonce, audience, issuerKeyResolver, fixedClock());
+                validator.validate(requestGivenNameAndFamilyName(), vpToken, nonce, audience, audience,
+                        "https://verifier.example.org/response", Optional.empty(), issuerKeyResolver, fixedClock());
 
         JsonNode credentialSubject = verified.get("my_credential").get(0).verifiedClaims().get("ld").get("credentialSubject");
         assertThat(credentialSubject.get("givenName").asText()).isEqualTo("John");
@@ -143,7 +144,7 @@ class WalletAuthorizationResponseBuilderTest {
         HolderKeyResolver holderKeyResolver = holderKeyResolver();
 
         WalletAuthorizationResponseResult result = walletBuilder.build(
-                query, store, new PresentationBuildParams("n", "aud", holderKeyResolver, fixedClock()));
+                query, store, new PresentationBuildParams("n", "aud", "aud", "https://verifier.example/response", Optional.empty(), holderKeyResolver, fixedClock()));
 
         assertThat(result).isInstanceOf(WalletAuthorizationResponseResult.Declined.class);
     }

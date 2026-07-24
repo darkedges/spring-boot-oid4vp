@@ -26,6 +26,8 @@ services:
       # crash at startup. Empty by default (no wallet invocation possible) is fine *here* because
       # application-cloudflare.yml already fully defines "conformance" independently of this var.
       - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCE_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT:-}
+      # Same idea, for the "conformancemdoc" registration (credential_format=iso_mdl / mso_mdoc).
+      - OID4VP_VERIFIER_RELYINGPARTY_CONFORMANCEMDOC_WALLETAUTHORIZATIONENDPOINT=${CONFORMANCE_MDOC_WALLET_AUTHORIZATION_ENDPOINT:-}
       # Same idea, for the "conformancecode" registration (response_type=code / Authorization Code Grant).
       # Both env vars are safe to set independently here (unlike the pair above): "conformancecode"
       # already always has redirect-uri set in application-cloudflare.yml, which alone is the code-flow

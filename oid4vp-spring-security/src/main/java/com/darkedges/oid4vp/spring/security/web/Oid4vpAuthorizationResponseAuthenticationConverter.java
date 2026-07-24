@@ -46,6 +46,7 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
         String error;
         String errorDescription;
         String vpTokenJson;
+        String mdocGeneratedNonce = null;
 
         String responseJwe = request.getParameter("response");
         if (responseJwe != null) {
@@ -54,6 +55,7 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
             error = decrypted.hasNonNull("error") ? decrypted.get("error").asText() : null;
             errorDescription = decrypted.hasNonNull("error_description") ? decrypted.get("error_description").asText() : null;
             vpTokenJson = decrypted.has("vp_token") ? decrypted.get("vp_token").toString() : null;
+            mdocGeneratedNonce = ResponseDecryptor.extractMdocGeneratedNonce(responseJwe).orElse(null);
         } else {
             state = request.getParameter("state");
             error = request.getParameter("error");
@@ -77,7 +79,7 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"vp_token\" parameter");
         }
 
-        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson);
+        return new Oid4vpAuthorizationResponseAuthenticationToken(context, vpTokenJson, null, mdocGeneratedNonce);
     }
 
     private JsonNode decryptResponse(HttpServletRequest request, String responseJwe) {
