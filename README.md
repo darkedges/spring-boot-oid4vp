@@ -321,11 +321,25 @@ here lets a caller redirect anywhere they choose.
   `/issuer-jwks` endpoint for credentials that carry no `x5c` (only the demo Wallet's own self-issued
   credential, via `DemoCredentialConfig`). A real Verifier resolves issuer trust through whatever
   framework it's deployed under.
-- `x509_san_dns` registrations (`demo`, `conformance`, `conformancecode` — all three) expect a Wallet's
-  response to be bound to `x509_hash:<base64url(sha256(DER of the request-signing certificate's leaf))>`,
-  not the literal `client_id` string — that's OpenID4VP's own Client Identifier Prefix binding rule, not a
-  demo simplification (`ExpectedAudienceResolver` computes it). The demo Wallet's `/present` flow fetches
-  an *unsigned* convenience JSON authorization request (`AuthorizeController`) that never carries the
-  signing certificate, so it can't compute this hash itself the way a real Wallet fetching the signed
-  `request_uri` would; `AuthorizeController` precomputes it into a bespoke `expected_response_audience`
-  field instead, which is only a safe shortcut because that whole JSON endpoint is already demo-only.
+- All three registrations (`demo`, `conformance`, `conformancecode`) use the `x509_hash` Client Identifier
+  Prefix — `client-id: "x509_hash:<base64url(sha256(DER of demo-verifier-signing-key.p12's leaf cert))>"`
+  — rather than `x509_san_dns`, since OpenID4VC HAIP (High Assurance Interoperability Profile) forbids
+  `x509_san_dns`/`verifier_attestation` outright and mandates `x509_hash`. `ExpectedAudienceResolver`
+  (`oid4vp-core`) still handles `x509_san_dns` correctly for any consumer that isn't targeting HAIP — this
+  demo just doesn't exercise that branch anymore. The demo Wallet's `/present` flow fetches an *unsigned*
+  convenience JSON authorization request (`AuthorizeController`) that never carries the signing
+  certificate, so `AuthorizeController` still precomputes the expected response audience into a bespoke
+  `expected_response_audience` field (safe only because that whole JSON endpoint is demo-only) — with
+  `x509_hash` as the client-id this now just mirrors `client_id` verbatim, but the mechanism stays generic.
+- `demo-verifier-signing-key.p12`'s leaf certificate is issued by a throwaway demo CA (also checked into
+  the keystore) rather than being self-signed itself — HAIP-conformant Wallets reject a self-signed leaf.
+  Regenerated via `keytool` (CA keypair → leaf keypair/CSR → CA signs the CSR → both certs imported back
+  into the leaf's keystore entry); if regenerated again, every registration's `client-id` above must be
+  recomputed to match the new leaf's hash.
+- The signed Request Object always carries `aud: "https://self-issued.me/v2"` (`RequestObjectSigner`) —
+  OpenID4VP's Static Discovery convention, since this project never does Dynamic Discovery (resolving a
+  Wallet's own issuer metadata). Nonce/state/transaction-id are 256-bit random tokens
+  (`Oid4vpAuthorizationRequestService`), comfortably above the spec's 128-bit floor. `conformance`'s
+  `client-metadata` declares both `A128GCM` and `A256GCM` under `encrypted_response_enc_values_supported`,
+  as HAIP requires — Nimbus's `ECDHDecrypter` already handles either transparently, so this was a
+  metadata-only change.

@@ -32,7 +32,10 @@ import java.util.Optional;
  */
 public final class Oid4vpAuthorizationRequestService {
 
-    private static final int TOKEN_BYTES = 16; // 128 bits
+    // 256 bits: comfortably above OpenID4VP's 128-bit nonce-entropy floor (OpenID4VP PR #722) — a single
+    // 128-bit sample's measured Shannon entropy can read as "insufficient" on some conformance checks
+    // purely from per-sample variance, so this leaves margin rather than sitting exactly on the minimum.
+    private static final int TOKEN_BYTES = 32; // 256 bits
     private static final int CODE_VERIFIER_BYTES = 32; // -> 43 base64url chars, within RFC 7636's 43-128 range
 
     private final Oid4vpRelyingPartyRegistrationRepository registrations;

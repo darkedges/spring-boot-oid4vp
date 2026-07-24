@@ -29,10 +29,13 @@ oid4vp:
   verifier:
     relying-party:
       demo:
-        # x509_san_dns (not redirect_uri:) because the request is signed — see
-        # DemoVerifierSigningKeyConfig — and per spec, "implementations requiring signed requests cannot
-        # use the redirect_uri Client Identifier Prefix". Must be a SAN on demo-verifier-signing-key.p12.
-        client-id: "x509_san_dns:localhost"
+        # x509_hash (not redirect_uri:) because the request is signed — see DemoVerifierSigningKeyConfig —
+        # and per spec, "implementations requiring signed requests cannot use the redirect_uri Client
+        # Identifier Prefix". x509_hash rather than x509_san_dns since HAIP forbids the latter; the value
+        # is base64url(SHA-256(DER of demo-verifier-signing-key.p12's leaf certificate)) — a property of
+        # the certificate itself, so it's identical across every registration/environment regardless of
+        # domain, and must be recomputed if that keystore is ever regenerated.
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",

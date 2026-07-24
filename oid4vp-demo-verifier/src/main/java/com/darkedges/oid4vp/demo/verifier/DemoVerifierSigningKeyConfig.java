@@ -19,15 +19,19 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Loads a static, self-signed EC key + certificate ({@code demo-verifier-signing-key.p12}, checked into
- * resources, SANs {@code localhost}/{@code verifier}/{@code verify.irving.au}) used to sign the
- * Authorization Request Object hosted at {@code /oid4vp/request/{registrationId}} — required for the
- * {@code x509_san_dns} Client Identifier Prefix (see {@code application.yml}'s {@code client-id}), since
- * unlike {@code redirect_uri:}, that scheme requires signed requests, verified by the Wallet directly
- * against the leaf certificate carried in the request's {@code x5c} JWS header.
+ * Loads a static EC key + 2-certificate chain ({@code demo-verifier-signing-key.p12}, checked into
+ * resources: a leaf cert with SANs {@code localhost}/{@code verifier}/{@code verify.irving.au}, issued by
+ * a self-signed demo CA — the leaf itself is <em>not</em> self-signed, since HAIP-conformant Wallets
+ * reject a self-signed leaf) used to sign the Authorization Request Object hosted at
+ * {@code /oid4vp/request/{registrationId}} — required for the {@code x509_hash} Client Identifier Prefix
+ * (see {@code application.yml}'s {@code client-id}), since unlike {@code redirect_uri:}, that scheme
+ * requires signed requests, verified by the Wallet directly against the leaf certificate carried in the
+ * request's {@code x5c} JWS header.
  *
- * <p>Not a pattern to copy for a real Verifier — a real deployment would use a certificate issued by a
- * CA the relying Wallets actually trust, not a self-signed one baked into the jar.
+ * <p>Not a pattern to copy for a real Verifier — a real deployment would use a certificate issued by a CA
+ * relying Wallets actually trust, not a throwaway demo CA baked into the jar. If this keystore is ever
+ * regenerated, every registration's {@code client-id} (the leaf's {@code x509_hash}) must be recomputed
+ * to match — see {@code application.yml}'s {@code demo} registration for the exact derivation.
  *
  * <p>Built via plain {@link KeyStore} rather than Nimbus's {@code ECKey.load(KeyStore, ...)}: that
  * convenience method reaches for BouncyCastle internally, and this project has no BouncyCastle dependency

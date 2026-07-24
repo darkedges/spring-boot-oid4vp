@@ -14,7 +14,7 @@ oid4vp:
   verifier:
     relying-party:
       demo:
-        client-id: "x509_san_dns:verify.irving.au"
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/demo"
         # vp_formats_supported is REQUIRED in client_metadata per spec "when not available to the Wallet
         # via another mechanism" — a conformance suite acting as Wallet has no other channel to learn it.
@@ -26,13 +26,13 @@ oid4vp:
         # ("format": "jwt") signed with the same key as the Request Object itself (DemoVerifierSigningKeyConfig).
         # Content is a demo-only attestation, not from any real trust framework.
         verifier-info: >
-          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.rxYP2ps7yJ1nfM1HF3OAiLMItpKdxnE8xKMsjpJsf45KNWNgItJAqYiFSm4xHKBQ4yn3Fmo5ed834k9QVugElg"}]
       # A second registration, separate from "demo": some conformance test plans require
       # response_mode=direct_post.jwt (encrypted response), which our own demo Wallet can't produce —
       # nothing in oid4vp-wallet-core can encrypt a response yet. Keeping this isolated means the local
       # browser demo (registration "demo", plain direct_post) is unaffected either way.
       conformance:
-        client-id: "x509_san_dns:verify.irving.au"
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/conformance"
         response-mode: "direct_post.jwt"
         dcql-query: >
@@ -45,11 +45,11 @@ oid4vp:
           {"jwks":{"keys":[{"kty":"EC","use":"enc","crv":"P-256","kid":"demo-verifier-encryption",
           "x":"xrGuOuYtOsauuXNHkXlsFo93P14Yfu1VNXmpZR9-9JI",
           "y":"b_Xpz-0tRjZfXuwuA-UClHGO2P9t03b0qPeV9yn-cY0","alg":"ECDH-ES"}]},
-          "encrypted_response_enc_values_supported":["A128GCM"],
+          "encrypted_response_enc_values_supported":["A128GCM","A256GCM"],
           "vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
           "kb-jwt_alg_values":["ES256"]}}}
         verifier-info: >
-          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.rxYP2ps7yJ1nfM1HF3OAiLMItpKdxnE8xKMsjpJsf45KNWNgItJAqYiFSm4xHKBQ4yn3Fmo5ed834k9QVugElg"}]
         # Set to a real Wallet's (or a conformance test run's exported) authorization_endpoint to enable
         # GET /oid4vp/invoke/conformance — see README: "Invoking a Wallet". Unset by default; the
         # CONFORMANCE_WALLET_AUTHORIZATION_ENDPOINT env var in docker-compose.cloudflare.yml sets this.
@@ -61,7 +61,7 @@ oid4vp:
       # Wallet plays the authorization server / token endpoint role. Isolated from "demo"/"conformance" the
       # same way they're isolated from each other.
       conformancecode:
-        client-id: "x509_san_dns:verify.irving.au"
+        client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         # Required by Oid4vpRelyingPartyRegistration but functionally unused for this flow: response_type
         # code has no response_uri at all (see redirect-uri below instead) — nothing ever POSTs here.
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/conformancecode"
@@ -73,7 +73,7 @@ oid4vp:
           {"vp_formats_supported":{"dc+sd-jwt":{"sd-jwt_alg_values":["ES256"],
           "kb-jwt_alg_values":["ES256"]}}}
         verifier-info: >
-          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.JiPyPiHNvQCbE0vw8hZGBkk_maphixpBckmUT1euudSnjfr-WiS7KGouwdkVw9gCcG__mTLExkpKKrxKWP2rDQ"}]
+          [{"format":"jwt","data":"eyJraWQiOiJkZW1vLXZlcmlmaWVyLXNpZ25pbmciLCJhbGciOiJFUzI1NiJ9.eyJpc3MiOiJodHRwczovL3ZlcmlmeS5pcnZpbmcuYXUiLCJuYW1lIjoiWktQIERlbW8gVmVyaWZpZXIiLCJwdXJwb3NlIjoiT3BlbklENFZQIGNvbmZvcm1hbmNlIGFuZCBwcm90b2NvbCBkZW1vbnN0cmF0aW9uIn0.rxYP2ps7yJ1nfM1HF3OAiLMItpKdxnE8xKMsjpJsf45KNWNgItJAqYiFSm4xHKBQ4yn3Fmo5ed834k9QVugElg"}]
         # redirect-uri alone is the code-flow toggle (see CodeFlowConfig) — this Verifier's own callback,
         # served by Oid4vpAuthorizationCodeCallbackFilter, wired generically at
         # /oid4vp/callback/{registrationId}. Always set, unlike wallet-token-endpoint below: it's the same
