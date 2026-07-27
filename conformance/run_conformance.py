@@ -5,11 +5,13 @@ documented in the top-level README.md ("Extra relying parties for conformance te
 "Invoking a Wallet").
 
 What it does, end to end:
-  1. Brings up the demo Verifier under the `cloudflare` + `tunnel` docker compose profiles
-     (skip with --no-compose if it's already running).
-  2. Creates and starts a test plan on the conformance suite from a JSON config file (e.g.
-     conformance/zkp-iso-mdl-test-config.json).
-  3. Waits for the resulting test module to expose its mock-Wallet `authorization_endpoint`.
+  1. Brings up the demo Verifier under the `cloudflare` docker compose profile (skip with
+     --no-compose if it's already running; add --with-tunnel if your Cloudflare tunnel is
+     also managed via docker-compose.tunnel.yml rather than some other long-lived setup).
+  2. Creates a test plan on the conformance suite from a JSON config file (e.g.
+     conformance/zkp-iso-mdl-test-config.json) and a variant, then instantiates and starts one
+     of its test modules.
+  3. Derives that module's mock-Wallet `authorization_endpoint` from its base URL.
   4. Restarts the Verifier container with that URL wired into the right registration's
      wallet-authorization-endpoint env var (this mirrors today's real deployment constraint:
      the value is read once at container startup, so a restart is unavoidable per run).
@@ -30,14 +32,17 @@ Environment variables:
 Usage:
   conformance/run_conformance.py \\
       --config conformance/zkp-iso-mdl-test-config.json \\
-      --plan-name oid4vp-1final-verifier-happy-path \\
+      --plan-name oid4vp-1final-verifier-test-plan \\
+      --variant '{"credential_format":"iso_mdl","client_id_prefix":"x509_hash","request_method":"request_uri_signed","vp_profile":"haip","response_mode":"direct_post.jwt"}' \\
+      --module oid4vp-1final-verifier-happy-flow \\
       --alias conformancemdoc
 
-Known unknowns (see conformance/README.md): the exact JSON shape the suite uses to expose a
-module's "Exported Values" (in particular, where the mock-Wallet authorization_endpoint lives
-in GET /api/info/{moduleId}'s response) is not pinned down from documentation alone -- it's
-read via --export-path, which defaults to a best guess and prints the full module-info JSON to
-help you find the right path on first run against your own instance.
+Creating a plan (POST /api/plan) only registers it and lists its constituent test module names
+-- it does not itself instantiate a runnable module. A second call (POST /api/runner, i.e.
+--module) actually creates and starts one, and its response's "url" field is the module's own
+base URL; the mock-Wallet endpoint the Verifier should be pointed at is always "<url>/authorize"
+(confirmed against a live instance: the suite exposes OIDC-style discovery under that base,
+e.g. "<url>/authorize", "<url>/token", "<url>/jwks").
 """
 from __future__ import annotations
 
@@ -58,7 +63,6 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMPOSE_FILES = [
     "docker-compose.yml",
     "docker-compose.cloudflare.yml",
-    "docker-compose.tunnel.yml",
 ]
 
 # registration alias -> (env var carrying the exported authorization_endpoint,
@@ -83,12 +87,13 @@ class ConformanceError(RuntimeError):
 
 
 class ConformanceClient:
-    """Thin wrapper over the conformance-suite's REST API, mirroring the request shapes used
-    by the suite's own reference automation (gitlab.com/openid/conformance-suite's
-    scripts/conformance.py + scripts/run-test-plan.py): POST /api/plan to create a plan,
-    POST /api/runner/{moduleId} to start a module, GET /api/runner/{moduleId}/wait-state to
-    block until a module reaches one of a set of states, GET /api/info/{moduleId} for a
-    module's current state/config, GET /api/log/{moduleId} for its result log.
+    """Thin wrapper over the conformance-suite's REST API, confirmed against a live self-hosted
+    instance: POST /api/plan to register a plan (returns its id + the names of its constituent
+    test modules, but does NOT instantiate any of them), POST /api/runner to actually create
+    and start one specific module from that plan (returns its own id + base url -- for an RP
+    test like ours this module comes up already WAITING, no separate start call needed), GET
+    /api/runner/{moduleId}/wait-state to block until a module reaches one of a set of states,
+    GET /api/log/{moduleId} for its result log.
     """
 
     def __init__(self, base_url: str, token: str | None = None, insecure: bool = False):
@@ -126,19 +131,24 @@ class ConformanceClient:
             raise ConformanceError(f"create_test_plan failed: HTTP {status}: {body}")
         return body
 
-    def module_info(self, module_id: str) -> dict:
-        status, body = self._request("GET", f"api/info/{module_id}")
-        if status != 200:
-            raise ConformanceError(f"module_info failed: HTTP {status}: {body}")
-        return body
-
-    def start_module(self, module_id: str) -> dict:
-        status, body = self._request("POST", f"api/runner/{module_id}")
-        if status != 200:
-            raise ConformanceError(f"start_module failed: HTTP {status}: {body}")
+    def create_test_module(self, plan_id: str, test_module: str, variant: dict | None = None) -> dict:
+        """Instantiates and starts one specific module of an already-created plan. Returns
+        {"name": <testModule>, "id": <moduleId>, "url": <moduleBaseUrl>}."""
+        params = {"test": test_module, "plan": plan_id}
+        if variant:
+            params["variant"] = json.dumps(variant)
+        status, body = self._request("POST", "api/runner", params=params)
+        if status != 201:
+            raise ConformanceError(f"create_test_module failed: HTTP {status}: {body}")
         return body
 
     def wait_for_state(self, module_id: str, states: list[str], timeout_ms: int = 30000) -> dict:
+        """Blocks (server-side, up to timeout_ms) until the module reaches one of `states`.
+        On success returns the module's info dict (same shape as a state snapshot, with a
+        "status" key); on a client-side timeout, confirmed live, the body is just
+        {"timeout": true} -- no "status" key at all, since the module simply hasn't reached
+        any of the requested states yet. Callers must treat that as "still waiting", not as a
+        state transition."""
         status, body = self._request(
             "GET",
             f"api/runner/{module_id}/wait-state",
@@ -160,41 +170,50 @@ def sh(cmd: list[str], **kwargs):
     return subprocess.run(cmd, cwd=REPO_ROOT, check=True, **kwargs)
 
 
-def compose_cmd(*extra: str) -> list[str]:
+def compose_cmd(*extra: str, with_tunnel: bool = False) -> list[str]:
     cmd = ["docker", "compose"]
-    for f in COMPOSE_FILES:
+    files = COMPOSE_FILES + (["docker-compose.tunnel.yml"] if with_tunnel else [])
+    for f in files:
         cmd += ["-f", f]
     cmd += list(extra)
     return cmd
 
 
-def bring_up_stack(env_overrides: dict[str, str]):
+def bring_up_stack(env_overrides: dict[str, str], with_tunnel: bool = False):
     env = os.environ.copy()
     env.update(env_overrides)
-    sh(compose_cmd("up", "-d", "--build"), env=env)
+    sh(compose_cmd("up", "-d", "--build", with_tunnel=with_tunnel), env=env)
+    wait_for_verifier_ready()
 
 
-def extract_authorization_endpoint(module_info: dict, export_path: str) -> str:
-    """Walks module_info via a dot-separated path (e.g. "exposed.authorization_endpoint").
-    Prints the full module_info JSON and raises if the path doesn't resolve to a string, since
-    the suite's exact export-field naming isn't pinned down from documentation alone -- see
-    conformance/README.md."""
-    node = module_info
-    for key in export_path.split("."):
-        if not isinstance(node, dict) or key not in node:
-            print(json.dumps(module_info, indent=2), file=sys.stderr)
-            raise ConformanceError(
-                f"--export-path {export_path!r} did not resolve (stopped at {key!r}); "
-                "see the module-info JSON above and re-run with the correct --export-path "
-                "for your instance/plan."
-            )
-        node = node[key]
-    if not isinstance(node, str):
-        print(json.dumps(module_info, indent=2), file=sys.stderr)
-        raise ConformanceError(
-            f"--export-path {export_path!r} resolved to a non-string value: {node!r}"
-        )
-    return node
+def wait_for_verifier_ready(timeout_s: int = 60):
+    """A freshly (re)started container is marked "Started" by docker compose well before the
+    Spring Boot app inside it has finished starting up -- confirmed live: firing the invoke
+    request immediately after `compose up` returned a 403 (still on the old/half-up process)
+    even though the exact same request succeeded moments later. Poll the same readiness check
+    demo.sh uses before doing anything that depends on the app actually being up."""
+    deadline = time.monotonic() + timeout_s
+    url = "http://localhost:8090/oid4vp/authorize/demo"
+    print(f"Waiting for the Verifier to become ready ({url}) ...", file=sys.stderr)
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                if resp.status == 200:
+                    return
+        except (OSError, TimeoutError):
+            # Covers connection-refused (app not listening yet) as well as connection-reset
+            # (container mid-restart, old process's socket torn down under us) -- both mean
+            # "not ready yet, keep polling", confirmed live during a real container restart.
+            pass
+        time.sleep(1)
+    raise ConformanceError(f"Verifier did not become ready at {url} within {timeout_s}s")
+
+
+def authorization_endpoint_for(module_url: str) -> str:
+    """The suite exposes an OIDC-style discovery surface under each running module's base url
+    (confirmed against a live instance): "<url>/authorize", "<url>/token", "<url>/jwks", etc.
+    The mock-Wallet endpoint a Verifier under test should be pointed at is "<url>/authorize"."""
+    return module_url.rstrip("/") + "/authorize"
 
 
 def trigger_exchange(invoke_url: str) -> tuple[int, str]:
@@ -232,9 +251,9 @@ def main() -> int:
     parser.add_argument("--variant", default=None, help="JSON object for the plan variant, if the plan needs one")
     parser.add_argument("--alias", required=True, choices=sorted(ALIAS_ENV), help="Which demo-verifier registration to drive")
     parser.add_argument("--verifier-host", default=DEFAULT_VERIFIER_HOST, help=f"Base URL of the tunnelled Verifier (default: {DEFAULT_VERIFIER_HOST})")
-    parser.add_argument("--module-index", type=int, default=0, help="Which module in the created plan to run, if it contains more than one")
-    parser.add_argument("--export-path", default="exposed.authorization_endpoint", help="Dot-path into the module-info JSON where the mock-Wallet authorization_endpoint lives (see conformance/README.md)")
-    parser.add_argument("--no-compose", action="store_true", help="Assume the Verifier is already running under the cloudflare+tunnel profile")
+    parser.add_argument("--module", default=None, help="testModule name to run from the plan, e.g. oid4vp-1final-verifier-happy-flow (default: the plan's first module)")
+    parser.add_argument("--no-compose", action="store_true", help="Assume the Verifier is already running under the cloudflare profile; don't bring it up or restart it")
+    parser.add_argument("--with-tunnel", action="store_true", help="Also layer on docker-compose.tunnel.yml (needs CLOUDFLARE_TUNNEL_TOKEN). Omit if your tunnel is managed some other way (e.g. a separate long-lived cloudflared deployment)")
     parser.add_argument("--wait-timeout-s", type=int, default=180, help="Max seconds to wait for the test module to finish")
     args = parser.parse_args()
 
@@ -257,20 +276,30 @@ def main() -> int:
     modules = plan.get("modules", [])
     if not modules:
         raise ConformanceError(f"Created plan {plan_id} has no modules in the response: {plan}")
-    module_id = modules[args.module_index]["id"]
-    print(f"Plan {plan_id} created, running module {module_id}", file=sys.stderr)
 
-    info = client.module_info(module_id)
-    if info.get("status") not in ("WAITING", "RUNNING"):
-        client.start_module(module_id)
+    if args.module:
+        matching = [m for m in modules if m.get("testModule") == args.module]
+        if not matching:
+            available = ", ".join(m.get("testModule", "?") for m in modules)
+            raise ConformanceError(f"--module {args.module!r} is not in this plan's modules: {available}")
+        test_module = args.module
+    else:
+        test_module = modules[0]["testModule"]
+
+    print(f"Plan {plan_id} created with {len(modules)} module(s); starting {test_module!r}", file=sys.stderr)
+    created = client.create_test_module(plan_id, test_module, variant)
+    module_id = created["id"]
+    module_url = created["url"]
+    print(f"Module {module_id} started at {module_url}", file=sys.stderr)
+
     info = client.wait_for_state(module_id, ["WAITING"], timeout_ms=30000)
 
-    auth_endpoint = extract_authorization_endpoint(info, args.export_path)
-    print(f"Exported authorization_endpoint: {auth_endpoint}", file=sys.stderr)
+    auth_endpoint = authorization_endpoint_for(module_url)
+    print(f"Mock-Wallet authorization_endpoint: {auth_endpoint}", file=sys.stderr)
 
     env_var, _token_env_var = ALIAS_ENV[args.alias]
     if not args.no_compose:
-        bring_up_stack({env_var: auth_endpoint})
+        bring_up_stack({env_var: auth_endpoint}, with_tunnel=args.with_tunnel)
     else:
         print(
             f"--no-compose set: make sure the running stack already has {env_var}={auth_endpoint}",
@@ -286,11 +315,14 @@ def main() -> int:
     state = info.get("status")
     while state not in TERMINAL_STATES and time.monotonic() < deadline:
         remaining_ms = max(1000, int((deadline - time.monotonic()) * 1000))
-        info = client.wait_for_state(module_id, list(TERMINAL_STATES), timeout_ms=min(30000, remaining_ms))
+        response = client.wait_for_state(module_id, list(TERMINAL_STATES), timeout_ms=min(30000, remaining_ms))
+        if response.get("timeout"):
+            continue  # still not in a terminal state -- keep polling, don't overwrite `info`/`state`
+        info = response
         state = info.get("status")
 
     if state not in TERMINAL_STATES:
-        print(f"Module {module_id} did not finish within {args.wait_timeout_s}s (last state: {state})", file=sys.stderr)
+        print(f"Module {module_id} did not finish within {args.wait_timeout_s}s (last known state: {state})", file=sys.stderr)
         return 1
 
     log = client.test_log(module_id)

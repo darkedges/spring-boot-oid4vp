@@ -11,3 +11,4 @@ target/
 
 # Conformance-suite test-plan configs embed real (throwaway) private key material.
 conformance/*.json
+conformance/__pycache__/
