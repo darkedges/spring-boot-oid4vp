@@ -37,9 +37,19 @@ oid4vp:
         # domain, and must be recomputed if that keystore is ever regenerated.
         client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "http://localhost:8090/login/oid4vp/direct-post/demo"
+        # vct_values accepts either of two credentials: oid4vp-demo-wallet's own self-issued demo
+        # credential (the placeholder https://demo.oid4vp.example/employee_credential, never actually
+        # fetched — see DemoConstants.VCT) and oid4vci-demo-issuer's UniversityDegreeCredential, whose vct
+        # is now issuer-relative and resolved per-request (see oid4vci's SdJwtVcCredentialConfiguration#resolvedVct)
+        # rather than a fixed domain, since the OpenID Conformance Suite fetches Type Metadata from vct via
+        # a real HTTP GET and the old placeholder domain was never resolvable. http://localhost:8092 below
+        # matches oid4vci's own README "Cross-repo interop" section's live-tested `issuerUrl=http://localhost:8092`
+        # example exactly; a different deployment (Docker network alias, public tunnel) needs its own entry
+        # here to match whatever base URL the Wallet actually used to obtain the credential from.
         dcql-query: >
           {"credentials":[{"id":"employee","format":"dc+sd-jwt",
-          "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential"]},
+          "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential",
+          "http://localhost:8092/vct/UniversityDegreeCredential"]},
           "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
       # Local, bare-metal-friendly counterpart to "demo" for mso_mdoc — always direct_post.jwt (encrypted),
       # since mdoc's SessionTranscript needs the mdocGeneratedNonce that only travels via the response
