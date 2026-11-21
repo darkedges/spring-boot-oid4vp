@@ -23,6 +23,24 @@
       <groupId>com.darkedges.oid4vp</groupId>
       <artifactId>oid4vp-spring-boot-autoconfigure</artifactId>
     </dependency>
+    <!-- Multi-tenancy (profile "tenancy") and PostgreSQL stores (profile "postgres"); inactive without those profiles. -->
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vc-tenancy</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vp-verifier-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>

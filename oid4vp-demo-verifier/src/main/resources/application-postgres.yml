@@ -1,0 +1,26 @@
+# Profile "postgres": keep tenants, their keys and the verifier's state (pending requests, ephemeral keys, same-device results) in
+# PostgreSQL, shared by every instance and kept across restarts. Usually with "tenancy".
+#
+#   VERIFIER_DATABASE_URL           jdbc:postgresql://host:5432/verifier
+#   VERIFIER_DATABASE_USERNAME      (default verifier)
+#   VERIFIER_DATABASE_PASSWORD
+#   TENANT_KEY_ENCRYPTION_KEY       base64 of 32 random bytes: encrypts tenants' private keys. Back it up: losing it loses them.
+#   VERIFIER_STORE_ENCRYPTION_KEY   base64 of 32 random bytes: encrypts the verifier's state, which holds verified identities.
+spring:
+  autoconfigure:
+    exclude: []
+  datasource:
+    url: ${VERIFIER_DATABASE_URL}
+    username: ${VERIFIER_DATABASE_USERNAME:verifier}
+    password: ${VERIFIER_DATABASE_PASSWORD}
+oid4vc:
+  tenancy:
+    store:
+      type: jdbc
+    keys:
+      encryption-key: ${TENANT_KEY_ENCRYPTION_KEY}
+oid4vp:
+  verifier:
+    store:
+      type: jdbc
+      encryption-key: ${VERIFIER_STORE_ENCRYPTION_KEY}

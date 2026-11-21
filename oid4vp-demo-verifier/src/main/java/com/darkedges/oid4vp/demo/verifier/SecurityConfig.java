@@ -1,5 +1,12 @@
 package com.darkedges.oid4vp.demo.verifier;
 
+import org.springframework.beans.factory.ObjectProvider;
+import com.darkedges.oid4vp.verifier.jdbc.VerifierEntryTable;
+import com.darkedges.oid4vp.verifier.jdbc.JdbcVerifierStores;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiOriginPolicy;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpTenantResolver;
+import com.darkedges.oid4vp.spring.security.authentication.Oid4vpIssuerTrust;
+import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.Oid4vpTenancy;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
@@ -54,9 +61,13 @@ public class SecurityConfig {
 
     private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
 
+    /** In PostgreSQL with oid4vp.verifier.store.type=jdbc (profile "postgres"), in memory otherwise. */
     @Bean
-    public Oid4vpTransactionResultRepository transactionResultRepository() {
-        return new InMemoryOid4vpTransactionResultRepository();
+    public Oid4vpTransactionResultRepository transactionResultRepository(ObjectProvider<VerifierEntryTable> table) {
+        VerifierEntryTable shared = table.getIfAvailable();
+        return shared != null
+                ? new JdbcVerifierStores.TransactionResults(shared, java.time.Clock.systemUTC(), java.time.Duration.ofMinutes(10))
+                : new InMemoryOid4vpTransactionResultRepository();
     }
 
     @Bean
@@ -73,30 +84,52 @@ public class SecurityConfig {
             ResponseDecryptionKeyResolver responseDecryptionKeyResolver,
             TokenEndpointClient tokenEndpointClient,
             @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri,
-            @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase)
+            @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase,
+            ObjectProvider<Oid4vpTenancy> tenancyProvider)
             throws Exception {
+        // With the "tenancy" profile, every tenant is served: the default tenant (irving) by this application's own registrations,
+        // keys and trust, each other tenant from its settings. Without it, Oid4vpTenancy is absent and these are the plain beans.
+        Oid4vpTenancy tenancy = tenancyProvider.getIfAvailable();
+        Oid4vpTenantResolver tenantResolver = tenancy == null ? Oid4vpTenantResolver.SINGLE_TENANT : tenancy.tenantResolver();
+        Oid4vpRelyingPartyRegistrationRepository effectiveRegistrations = tenancy == null ? registrations : tenancy.registrations(registrations);
+        RequestObjectSigningKeyResolver signingKeys = tenancy == null
+                ? requestObjectSigningKeyResolver : tenancy.requestObjectSigningKeys(requestObjectSigningKeyResolver);
+        Oid4vpIssuerTrust issuerTrust = tenancy == null ? Oid4vpIssuerTrust.everywhere(issuerKeyResolver) : tenancy.issuerTrust(issuerKeyResolver);
+        Oid4vpDcApiOriginPolicy originPolicy = tenancy == null ? Oid4vpDcApiOriginPolicy.ANY : tenancy.dcApiOriginPolicy();
+        java.util.function.Function<jakarta.servlet.http.HttpServletRequest, String> resultBase = tenancy == null
+                ? request -> sameDeviceResultBaseUri : tenancy.url("/oid4vp/result", sameDeviceResultBaseUri);
+        java.util.function.Function<jakarta.servlet.http.HttpServletRequest, String> requestBase = tenancy == null
+                ? request -> requestUriBase : tenancy.url("/oid4vp/request", requestUriBase);
 
         http.csrf(csrf -> csrf.disable())
+                // CORS for the AuthStack console's calls to the tenancy admin API (oid4vc.tenancy.admin.allowed-origins); none otherwise.
+                .cors(org.springframework.security.config.Customizer.withDefaults())
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/", "/index.html", "/demo-config", "/oid4vp/**", "/login/oid4vp/**").permitAll()
+                        // Error pages keep their status (a 404 stays a 404 instead of becoming a 403 for the forward to /error).
+                        .requestMatchers("/error").permitAll()
+                        // The tenancy admin API checks the AuthStack console token itself, with AuthStack.
+                        .requestMatchers("/admin/api/**").permitAll()
                         .anyRequest().authenticated())
                 .with(Oid4vpLoginConfigurer.oid4vpLogin(), configurer -> configurer
-                        .relyingPartyRegistrationRepository(registrations)
+                        .tenantResolver(tenantResolver)
+                        .relyingPartyRegistrationRepository(effectiveRegistrations)
                         .authorizationRequestRepository(requestRepository)
                         // Must be the same instance DemoVerifierEncryptionKeyConfig's responseDecryptionKeyResolver
                         // reads from — see Oid4vpLoginConfigurer.ephemeralEncryptionKeyRepository's Javadoc.
                         .ephemeralEncryptionKeyRepository(ephemeralEncryptionKeyRepository)
                         .presentationVerifier(sdJwtVcPresentationVerifier)
                         .presentationVerifier(mdocPresentationVerifier)
-                        .issuerKeyResolver(issuerKeyResolver)
-                        .requestObjectSigningKeyResolver(requestObjectSigningKeyResolver)
+                        .issuerTrust(issuerTrust)
+                        .dcApiOriginPolicy(originPolicy)
+                        .requestObjectSigningKeyResolver(signingKeys)
                         .requestObjectSigningAlgorithm(JWSAlgorithm.ES256)
                         // Only the "conformance" registration actually uses direct_post.jwt — see
                         // application-cloudflare.yml and DemoVerifierEncryptionKeyConfig.
                         .responseDecryptionKeyResolver(responseDecryptionKeyResolver)
-                        .sameDeviceHandoff(transactionResultRepository, sameDeviceResultBaseUri)
+                        .sameDeviceHandoff(transactionResultRepository, resultBase)
                         .sameDeviceResultRedirectUri("/")
-                        .walletInvocation(requestUriBase)
+                        .walletInvocation(requestBase)
                         // Only the "conformancecode" registration actually uses response_type=code — see
                         // application-cloudflare.yml.
                         .authorizationCodeCallback(tokenEndpointClient)

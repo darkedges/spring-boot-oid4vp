@@ -87,6 +87,8 @@
 <footer id="footer">Loading configuration…</footer>
 
 <script>
+  // On a path tenant (https://verifier.zkp.au/t/bank/) every call stays with that tenant.
+  const tenantPrefix = (window.location.pathname.match(/^\/t\/[a-z0-9-]+/) || [''])[0];
   let demoConfig = null;
 
   const loadingEl = document.getElementById("loading");
@@ -106,7 +108,7 @@
   }
 
   async function loadDemoConfig() {
-    const res = await fetch("/demo-config");
+    const res = await fetch(tenantPrefix + "/demo-config");
     demoConfig = await res.json();
 
     document.title = demoConfig.employerName + " — Employee Verification";
@@ -119,7 +121,7 @@
 
   async function checkSession() {
     try {
-      const res = await fetch("/profile", { credentials: "same-origin" });
+      const res = await fetch(tenantPrefix + "/profile", { credentials: "same-origin" });
       if (res.ok) {
         const profile = await res.json();
         if (profile.authenticated) {

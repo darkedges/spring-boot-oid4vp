@@ -130,6 +130,13 @@ issuer trust and URLs.
 - **Without `Oid4vpTenancy`,** a verifier can still be multi-tenant by supplying its own `Oid4vpTenantResolver`, registration
   repository and `Oid4vpIssuerTrust`, keyed by registration key.
 
+**The demo verifier** turns this on with profiles. Its default profile is unchanged and single-tenant.
+- **`tenancy`:** the default tenant `irving` is the verifier as it was, on `https://verify.irving.au`, with its own relying parties, key
+  and `x509_hash` client id. Other tenants are served from their settings. See `application-tenancy.yml` for the environment variables.
+- **`postgres`:** keeps tenants, keys and the verifier's state in PostgreSQL. See `application-postgres.yml` for `VERIFIER_DATABASE_*`,
+  `TENANT_KEY_ENCRYPTION_KEY` and `VERIFIER_STORE_ENCRYPTION_KEY`.
+- **The demo page** stays on its path tenant (`/t/<slug>/`).
+
 **Persistent state (`oid4vp-verifier-jdbc`).** Set `oid4vp.verifier.store.type=jdbc` to keep pending requests, ephemeral
 response-encryption keys and same-device results in PostgreSQL, through the application's `DataSource`. Several instances share them,
 and they survive a restart.
