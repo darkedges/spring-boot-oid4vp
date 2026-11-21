@@ -2,7 +2,6 @@ package com.darkedges.oid4vc.tenancy.autoconfigure;
 
 import com.darkedges.oid4vc.tenancy.CachingTenantRepository;
 import com.darkedges.oid4vc.tenancy.InMemoryTenantRepository;
-import com.darkedges.oid4vc.tenancy.JdbcTenantRepository;
 import com.darkedges.oid4vc.tenancy.Slugs;
 import com.darkedges.oid4vc.tenancy.Tenant;
 import com.darkedges.oid4vc.tenancy.TenantRepository;
@@ -16,7 +15,6 @@ import com.darkedges.oid4vc.tenancy.domains.AuthStackDomainDirectory;
 import com.darkedges.oid4vc.tenancy.domains.DomainDirectory;
 import com.darkedges.oid4vc.tenancy.domains.StaticDomainDirectory;
 import com.darkedges.oid4vc.tenancy.keys.InMemoryTenantKeyRepository;
-import com.darkedges.oid4vc.tenancy.keys.JdbcTenantKeyRepository;
 import com.darkedges.oid4vc.tenancy.keys.KeyEncryptor;
 import com.darkedges.oid4vc.tenancy.keys.TenantCertificateAuthority;
 import com.darkedges.oid4vc.tenancy.keys.TenantKeyRepository;
@@ -34,12 +32,7 @@ import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.DefaultResourceLoader;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -70,12 +63,8 @@ public class TenancyAutoConfiguration {
     @ConditionalOnMissingBean
     public TenantRepository tenantRepository(TenancyProperties properties, ObjectProvider<DataSource> dataSource) {
         TenantRepository store = isJdbc(properties)
-                ? new JdbcTenantRepository(JdbcClient.create(requireDataSource(dataSource, properties)))
+                ? jdbc(() -> JdbcTenancyStores.tenants(requireDataSource(dataSource, properties), properties.getStore().isInitializeSchema()))
                 : new InMemoryTenantRepository();
-        if (isJdbc(properties) && properties.getStore().isInitializeSchema()) {
-            new ResourceDatabasePopulator(new ClassPathResource("oid4vc-tenancy/schema-postgresql.sql"))
-                    .execute(requireDataSource(dataSource, properties));
-        }
         TenantRepository cached = new CachingTenantRepository(store, properties.getStore().getCacheTtl());
         bootstrapDefaultTenant(cached, properties.getDefaultTenant());
         return cached;
@@ -90,8 +79,8 @@ public class TenancyAutoConfiguration {
             return new InMemoryTenantKeyRepository();
         }
         DataSource ds = requireDataSource(dataSource, properties);
-        return new JdbcTenantKeyRepository(JdbcClient.create(ds), KeyEncryptor.fromBase64(properties.getKeys().getEncryptionKey()),
-                new TransactionTemplate(new DataSourceTransactionManager(ds)));
+        KeyEncryptor encryptor = KeyEncryptor.fromBase64(properties.getKeys().getEncryptionKey());
+        return jdbc(() -> JdbcTenancyStores.keys(ds, encryptor));
     }
 
     @Bean
@@ -191,6 +180,15 @@ public class TenancyAutoConfiguration {
                             .allowedMethods("GET", "PUT", "POST", "DELETE").allowedHeaders("Authorization", "Content-Type").maxAge(600);
                 }
             };
+        }
+    }
+
+    /** Builds a PostgreSQL store, with a clear message when spring-jdbc isn't on the classpath. */
+    private static <T> T jdbc(java.util.function.Supplier<T> build) {
+        try {
+            return build.get();
+        } catch (NoClassDefFoundError e) {
+            throw new IllegalStateException("oid4vc.tenancy.store.type=jdbc needs spring-jdbc (spring-boot-starter-jdbc) on the classpath, or set it to memory", e);
         }
     }
 
