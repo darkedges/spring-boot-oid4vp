@@ -79,6 +79,31 @@ class DcqlEvaluatorTest {
                 s -> assertThat(s.chosenClaims()).hasSize(3));
     }
 
+    // ---- multiple ------------------------------------------------------------------------------
+
+    @Test
+    void severalMatchingCredentials_withoutMultiple_selectsOnlyOne() {
+        JsonNode credential = json("""
+                {"vct": "%s", "given_name": "John", "family_name": "Doe"}
+                """.formatted(IDENTITY_VCT));
+        CredentialStore store = CredentialStore.of(List.of(
+                new TestHeldCredential(IDENTITY_VCT, credential, true), new TestHeldCredential(IDENTITY_VCT, credential, true)));
+        DcqlQuery one = DcqlQueryReader.read(json("""
+                {"credentials":[{"id":"id","format":"dc+sd-jwt",
+                  "meta":{"vct_values":["%s"]},"claims":[{"path":["given_name"]}]}]}
+                """.formatted(IDENTITY_VCT)));
+        DcqlQuery several = DcqlQueryReader.read(json("""
+                {"credentials":[{"id":"id","format":"dc+sd-jwt","multiple":true,
+                  "meta":{"vct_values":["%s"]},"claims":[{"path":["given_name"]}]}]}
+                """.formatted(IDENTITY_VCT)));
+
+        var single = (DcqlEvaluationResult.Selected) evaluator.evaluate(one, store);
+        assertThat(single.presentations().get("id")).hasSize(1);
+
+        var many = (DcqlEvaluationResult.Selected) evaluator.evaluate(several, store);
+        assertThat(many.presentations().get("id")).hasSize(2);
+    }
+
     // ---- value_matching_simple.json ------------------------------------------------------------
 
     @Test
