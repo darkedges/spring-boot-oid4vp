@@ -26,6 +26,8 @@
 #                                             Without a CA, each tenant certificate is self-signed.
 #   VERIFIER_PLATFORM_ORIGINS                 default below: verifier.zkp.au (tenants' <slug>.verifier.zkp.au and /t/<slug>), and
 #                                             verify.irving.au, where the default tenant ("irving") keeps being served
+#   VERIFIER_DEFAULT_TENANT_ID / _SLUG        the AuthStack environment that tenant belongs to, and its slug
+#                                             (terraform/credential-services in AuthStack); default irving / irving
 services:
   verifier-db:
     image: postgres:17-alpine
@@ -58,6 +60,8 @@ services:
       - TENANT_KEY_ENCRYPTION_KEY=${TENANT_KEY_ENCRYPTION_KEY:?set TENANT_KEY_ENCRYPTION_KEY (base64 of 32 random bytes)}
       - VERIFIER_STORE_ENCRYPTION_KEY=${VERIFIER_STORE_ENCRYPTION_KEY:?set VERIFIER_STORE_ENCRYPTION_KEY (base64 of 32 random bytes)}
       - VERIFIER_PLATFORM_ORIGINS=${VERIFIER_PLATFORM_ORIGINS:-https://verifier.zkp.au,https://verify.irving.au,http://localhost:8090,http://verifier:8090}
+      - VERIFIER_DEFAULT_TENANT_ID
+      - VERIFIER_DEFAULT_TENANT_SLUG
       - OID4VC_TENANCY_AUTHSTACK_API_URL
       - OID4VC_TENANCY_AUTHSTACK_TOKEN_URL
       - OID4VC_TENANCY_AUTHSTACK_CLIENT_ID
