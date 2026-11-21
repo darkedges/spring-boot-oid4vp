@@ -16,6 +16,7 @@ integrated with Spring Security 7.1.0 / Spring Boot 4.1.0.
 | `oid4vp-spring-security` | Spring Security integration: `AuthenticationProvider`, `direct_post`/DC API filters, `Oid4vpLoginConfigurer` DSL |
 | `oid4vp-spring-boot-autoconfigure` | `oid4vp.verifier.*` properties and default beans |
 | `oid4vc-tenancy` | Multi-tenancy shared with the OID4VCI issuer: tenants (one per AuthStack environment), host and path routing, per-tenant keys, the console's admin API. See [docs/multi-tenancy.md](docs/multi-tenancy.md) |
+| `oid4vp-verifier-jdbc` | PostgreSQL stores for the verifier (pending requests, ephemeral keys, same-device results): `oid4vp.verifier.store.type=jdbc` |
 | `oid4vp-demo-wallet` | Runnable demo Wallet app |
 | `oid4vp-demo-verifier` | Runnable demo Verifier app |
 

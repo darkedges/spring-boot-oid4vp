@@ -43,6 +43,7 @@
     <module>oid4vp-spring-security</module>
     <module>oid4vp-spring-boot-autoconfigure</module>
     <module>oid4vc-tenancy</module>
+    <module>oid4vp-verifier-jdbc</module>
     <module>oid4vp-demo-wallet</module>
     <module>oid4vp-demo-verifier</module>
   </modules>
@@ -140,6 +141,11 @@
       <dependency>
         <groupId>com.darkedges.oid4vp</groupId>
         <artifactId>oid4vc-tenancy</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vp-verifier-jdbc</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>

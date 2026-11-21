@@ -130,6 +130,16 @@ issuer trust and URLs.
 - **Without `Oid4vpTenancy`,** a verifier can still be multi-tenant by supplying its own `Oid4vpTenantResolver`, registration
   repository and `Oid4vpIssuerTrust`, keyed by registration key.
 
+**Persistent state (`oid4vp-verifier-jdbc`).** Set `oid4vp.verifier.store.type=jdbc` to keep pending requests, ephemeral
+response-encryption keys and same-device results in PostgreSQL, through the application's `DataSource`. Several instances share them,
+and they survive a restart.
+- **One table,** `oid4vp_verifier_entry`, created at start-up.
+- **Keys** (`state`, transaction ids) and **owners** (the registration key, the response code) are stored only as SHA-256 hashes.
+- **Payloads are encrypted with AES-256-GCM** under `oid4vp.verifier.store.encryption-key` (`VERIFIER_STORE_ENCRYPTION_KEY`, base64 of
+  32 random bytes; required).
+- **A request or result is consumed in one statement, and only by its owner:** a `state` presented at another registration, or a result
+  collected with the wrong code, is left for its rightful use.
+
 ## Configuration
 
 ```yaml
