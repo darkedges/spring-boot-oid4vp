@@ -42,6 +42,7 @@
     <module>oid4vp-wallet-core</module>
     <module>oid4vp-spring-security</module>
     <module>oid4vp-spring-boot-autoconfigure</module>
+    <module>oid4vc-tenancy</module>
     <module>oid4vp-demo-wallet</module>
     <module>oid4vp-demo-verifier</module>
   </modules>
@@ -135,6 +136,16 @@
         <groupId>com.darkedges.oid4vp</groupId>
         <artifactId>oid4vp-spring-boot-autoconfigure</artifactId>
         <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.darkedges.oid4vp</groupId>
+        <artifactId>oid4vc-tenancy</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcpkix-jdk18on</artifactId>
+        <version>1.81</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
