@@ -84,6 +84,17 @@ class TenancyWiringTest {
     }
 
     @Test
+    void theMemoryStoreNeedsNeitherSpringJdbcNorSpringTx() {
+        new WebApplicationContextRunner()
+                .withClassLoader(new org.springframework.boot.test.context.FilteredClassLoader(
+                        "org.springframework.jdbc", "org.springframework.transaction"))
+                .withConfiguration(AutoConfigurations.of(TenancyAutoConfiguration.class))
+                .withPropertyValues("oid4vc.tenancy.enabled=true", "oid4vc.tenancy.store.type=memory",
+                        "oid4vc.tenancy.platform-origins=https://issuer.zkp.au", "oid4vc.tenancy.admin.enabled=false")
+                .run(context -> assertThat(context).hasNotFailed().hasSingleBean(TenantResolver.class));
+    }
+
+    @Test
     void theJdbcStoreRefusesToStartWithoutADataSourceOrKey() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(TenancyAutoConfiguration.class))
