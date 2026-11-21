@@ -16,6 +16,14 @@ oid4vp:
       demo:
         client-id: "x509_hash:Q8xBESl73Ce97aSLsk8TP7zWKEoEsYS5uuBFjjWyhK8"
         response-uri: "https://verify.irving.au/login/oid4vp/direct-post/demo"
+        # The hosted counterpart of application.yml's demo query: that one names the local issuer (http://localhost:8092); hosted, the
+        # credential oid4vci-demo-issuer issues (collected at vciwallet.zkp.au) is typed by issuer.zkp.au. Without this, "Present" from
+        # vciwallet.zkp.au failed with: required credential query "employee" has no matching credentials.
+        dcql-query: >
+          {"credentials":[{"id":"employee","format":"dc+sd-jwt",
+          "meta":{"vct_values":["https://demo.oid4vp.example/employee_credential",
+          "https://issuer.zkp.au/vct/UniversityDegreeCredential"]},
+          "claims":[{"path":["given_name"]},{"path":["family_name"]}]}]}
         # vp_formats_supported is REQUIRED in client_metadata per spec "when not available to the Wallet
         # via another mechanism" — a conformance suite acting as Wallet has no other channel to learn it.
         # Shape matches the spec's own non-normative example for dc+sd-jwt.

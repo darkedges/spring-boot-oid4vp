@@ -41,7 +41,11 @@ public final class DcqlEvaluator {
     public DcqlEvaluationResult evaluate(DcqlQuery query, CredentialStore store) {
         Map<String, List<CredentialPresentationPlan>> candidatesByQueryId = new LinkedHashMap<>();
         for (CredentialQuery credentialQuery : query.credentials()) {
-            candidatesByQueryId.put(credentialQuery.id(), findCandidates(credentialQuery, store));
+            List<CredentialPresentationPlan> candidates = findCandidates(credentialQuery, store);
+            // multiple=false (the default) allows exactly one Presentation for this query (OpenID4VP 1.0, 6.1): a Wallet holding
+            // several matching credentials presents the first, never all of them (a Verifier rightly refuses that response).
+            if (!credentialQuery.multiple() && candidates.size() > 1) candidates = List.of(candidates.get(0));
+            candidatesByQueryId.put(credentialQuery.id(), candidates);
         }
 
         if (query.credentialSets().isEmpty()) {
