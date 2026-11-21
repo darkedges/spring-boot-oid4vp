@@ -10,6 +10,8 @@
 # containers on one private network — see application-cloudflare.yml in each module for why.
 services:
   wallet:
+    # Hosted, it comes back with the machine, as the verifier does; stopped, verify.irving.au's "Sign in with Wallet" fails.
+    restart: unless-stopped
     environment:
       - SPRING_PROFILES_ACTIVE=cloudflare
 

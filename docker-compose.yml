@@ -5,7 +5,8 @@ services:
     build:
       context: ./oid4vp-demo-wallet
     ports:
-      - "8081:8081"
+      # The host port is a setting (WALLET_HOST_PORT) for a host where 8081 is taken; wallet.zkp.au's tunnel rule must match it.
+      - "${WALLET_HOST_PORT:-8081}:8081"
     environment:
       - SPRING_PROFILES_ACTIVE=docker
 
