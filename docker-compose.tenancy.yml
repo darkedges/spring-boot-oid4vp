@@ -1,0 +1,72 @@
+# The verifier as a multi-tenant service: every AuthStack environment that enables verification is its own verifier, with its own
+# registrations, trusted issuers, request-object key and x509_hash client id (see docs/multi-tenancy.md). Layers on the other files:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml -f docker-compose.tenancy.yml up -d --build
+#
+# Tenants, their keys, and the verifier's transactions are kept in the verifier-db PostgreSQL below, so they survive a restart and
+# the console's changes persist. Nothing secret is written here: every value comes from your shell (or an untracked .env next to
+# this file). A name with no "=" is passed only when it is set, so an optional setting left unset stays unset.
+#
+# Required (the verifier refuses to start without them):
+#   VERIFIER_DATABASE_PASSWORD      the verifier-db password (it creates the database with it on first start)
+#   TENANT_KEY_ENCRYPTION_KEY       base64 of 32 random bytes: encrypts every tenant's private keys. BACK IT UP: losing it loses
+#                                   them. Its own value, not the issuer's.
+#   VERIFIER_STORE_ENCRYPTION_KEY   base64 of 32 random bytes: encrypts transactions in flight
+#     e.g.  export TENANT_KEY_ENCRYPTION_KEY="$(openssl rand -base64 32)"
+#
+# Optional:
+#   OID4VC_TENANCY_AUTHSTACK_API_URL          AuthStack's API (https://api.authstack.darkedges.com): console sign-in for the admin API
+#   OID4VC_TENANCY_AUTHSTACK_TOKEN_URL        } the platform worker (AuthStack's Administrator environment, listed in
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_ID        } CREDENTIAL_PLATFORM_WORKER_IDS). The verifier has no customer domains yet (only the
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_SECRET    } issuer is the tunnel's catch-all), so these are for later.
+#   OID4VC_TENANCY_ADMIN_ENABLED=true         with the API URL, the AuthStack console manages tenants
+#   OID4VC_TENANCY_ADMIN_ALLOWED_ORIGINS      the console's origin: https://console.authstack.darkedges.com
+#   TENANT_CA_DIR                             a directory holding ca.p12, the CA that certifies tenant keys; with
+#   OID4VC_TENANCY_KEYS_CA_KEYSTORE=file:/ca/ca.p12, OID4VC_TENANCY_KEYS_CA_KEYSTORE_PASSWORD and OID4VC_TENANCY_KEYS_CA_ALIAS.
+#                                             Without a CA, each tenant certificate is self-signed.
+#   VERIFIER_PLATFORM_ORIGINS                 default below: verifier.zkp.au (tenants' <slug>.verifier.zkp.au and /t/<slug>), and
+#                                             verify.irving.au, where the default tenant ("irving") keeps being served
+services:
+  verifier-db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=verifier
+      - POSTGRES_USER=verifier
+      - POSTGRES_PASSWORD=${VERIFIER_DATABASE_PASSWORD:?set VERIFIER_DATABASE_PASSWORD}
+    volumes:
+      - verifier-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U verifier -d verifier"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  verifier:
+    restart: unless-stopped
+    depends_on:
+      verifier-db:
+        condition: service_healthy
+    volumes:
+      - ${TENANT_CA_DIR:-./tenant-ca}:/ca:ro
+    environment:
+      # Overrides the other files' profile: cloudflare (or docker) as before, plus tenancy and its PostgreSQL stores.
+      - SPRING_PROFILES_ACTIVE=${VERIFIER_BASE_PROFILE:-cloudflare},tenancy,postgres
+      - VERIFIER_DATABASE_URL=jdbc:postgresql://verifier-db:5432/verifier
+      - VERIFIER_DATABASE_USERNAME=verifier
+      - VERIFIER_DATABASE_PASSWORD=${VERIFIER_DATABASE_PASSWORD:?set VERIFIER_DATABASE_PASSWORD}
+      - TENANT_KEY_ENCRYPTION_KEY=${TENANT_KEY_ENCRYPTION_KEY:?set TENANT_KEY_ENCRYPTION_KEY (base64 of 32 random bytes)}
+      - VERIFIER_STORE_ENCRYPTION_KEY=${VERIFIER_STORE_ENCRYPTION_KEY:?set VERIFIER_STORE_ENCRYPTION_KEY (base64 of 32 random bytes)}
+      - VERIFIER_PLATFORM_ORIGINS=${VERIFIER_PLATFORM_ORIGINS:-https://verifier.zkp.au,https://verify.irving.au,http://localhost:8090,http://verifier:8090}
+      - OID4VC_TENANCY_AUTHSTACK_API_URL
+      - OID4VC_TENANCY_AUTHSTACK_TOKEN_URL
+      - OID4VC_TENANCY_AUTHSTACK_CLIENT_ID
+      - OID4VC_TENANCY_AUTHSTACK_CLIENT_SECRET
+      - OID4VC_TENANCY_ADMIN_ENABLED
+      - OID4VC_TENANCY_ADMIN_ALLOWED_ORIGINS
+      - OID4VC_TENANCY_KEYS_CA_KEYSTORE
+      - OID4VC_TENANCY_KEYS_CA_KEYSTORE_PASSWORD
+      - OID4VC_TENANCY_KEYS_CA_ALIAS
+
+volumes:
+  verifier-db:
