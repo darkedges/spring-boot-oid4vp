@@ -1,5 +1,11 @@
 package com.darkedges.oid4vp.demo.verifier;
 
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.ObjectProvider;
+import jakarta.servlet.http.HttpServletRequest;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpTenantResolver;
+import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.Oid4vpTenancy;
 import com.darkedges.oid4vp.core.request.AuthorizationRequestWriter;
 import com.darkedges.oid4vp.core.request.ExpectedAudienceResolver;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
@@ -34,21 +40,37 @@ public class AuthorizeController {
 
     private final Oid4vpAuthorizationRequestService requestService;
     private final RequestObjectSigningKeyResolver requestObjectSigningKeyResolver;
+    private final Oid4vpTenantResolver tenantResolver;
 
     public AuthorizeController(
             Oid4vpAuthorizationRequestService requestService,
-            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver) {
+            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver,
+            ObjectProvider<Oid4vpTenancy> tenancy) {
         this.requestService = requestService;
-        this.requestObjectSigningKeyResolver = requestObjectSigningKeyResolver;
+        Oid4vpTenancy t = tenancy.getIfAvailable();
+        this.requestObjectSigningKeyResolver = t == null ? requestObjectSigningKeyResolver : t.requestObjectSigningKeys(requestObjectSigningKeyResolver);
+        this.tenantResolver = t == null ? Oid4vpTenantResolver.SINGLE_TENANT : t.tenantResolver();
     }
 
     @GetMapping(value = "/oid4vp/authorize/{registrationId}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public String authorize(@PathVariable String registrationId) {
-        Oid4vpAuthorizationRequestResolution resolution = requestService.resolve(registrationId);
+    public String authorize(@PathVariable String registrationId, HttpServletRequest servletRequest) {
+        // The request's tenant and the registration named: another tenant's registration of the same name is another relying party.
+        String registrationKey;
+        try {
+            registrationKey = tenantResolver.registrationKey(servletRequest, registrationId);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown relying party");
+        }
+        Oid4vpAuthorizationRequestResolution resolution;
+        try {
+            resolution = requestService.resolve(registrationKey);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "unknown relying party");
+        }
         ObjectNode json = AuthorizationRequestWriter.write(resolution.request());
         json.put("transaction_id", resolution.transactionId());
         json.put("expected_response_audience", ExpectedAudienceResolver.resolve(
-                resolution.request().clientId(), requestObjectSigningKeyResolver, registrationId));
+                resolution.request().clientId(), requestObjectSigningKeyResolver, registrationKey));
         return json.toString();
     }
 }

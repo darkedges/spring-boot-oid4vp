@@ -1,0 +1,29 @@
+# Profile "tenancy": one verifier for many tenants, each an AuthStack environment (see docs/multi-tenancy.md). A tenant is served
+# on <slug>.<platform host>, on a custom domain AuthStack has verified for it, or on <platform origin>/t/<slug>.
+#
+# The default tenant ("irving") is the verifier as it was: on the platform origins themselves, with this application's own
+# registrations (oid4vp.verifier.relying-party.*), signing key and issuer trust. Every other tenant has registrations, a trust list
+# and DC API origins from its settings, and its own request-object key and x509_hash client id.
+#
+# Settings left to the environment (relaxed binding), so nothing here is a secret:
+#   OID4VC_TENANCY_AUTHSTACK_API_URL         AuthStack, for console sign-in to the admin API and for verified custom domains
+#   OID4VC_TENANCY_AUTHSTACK_TOKEN_URL       the platform worker's token endpoint   } custom domains;
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_ID       the platform worker                    } without them, platform
+#   OID4VC_TENANCY_AUTHSTACK_CLIENT_SECRET                                          } subdomains and paths only
+#   OID4VC_TENANCY_ADMIN_ENABLED=true        with the API URL, lets the AuthStack console manage tenants
+#   OID4VC_TENANCY_ADMIN_ALLOWED_ORIGINS     the console's origin
+#   OID4VC_TENANCY_KEYS_CA_KEYSTORE / _CA_KEYSTORE_PASSWORD / _CA_ALIAS   the CA certifying tenant keys (self-signed without)
+# Add the "postgres" profile to keep tenants, keys and verifier state in PostgreSQL; without it they are in memory.
+oid4vc:
+  tenancy:
+    enabled: true
+    service: verifier
+    platform-origins: ${VERIFIER_PLATFORM_ORIGINS:https://verify.irving.au,http://localhost:8090,http://verifier:8090}
+    platform-paths: [/admin/api/**, /actuator/**, /error]
+    default-tenant:
+      id: ${VERIFIER_DEFAULT_TENANT_ID:irving}
+      slug: ${VERIFIER_DEFAULT_TENANT_SLUG:irving}
+    store:
+      type: memory
+    admin:
+      enabled: false

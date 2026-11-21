@@ -1,3 +1,7 @@
+spring:
+  autoconfigure:
+    # No database unless the "postgres" profile asks for one (it clears this).
+    exclude: org.springframework.boot.jdbc.autoconfigure.DataSourceAutoConfiguration
 server:
   port: 8090
 
