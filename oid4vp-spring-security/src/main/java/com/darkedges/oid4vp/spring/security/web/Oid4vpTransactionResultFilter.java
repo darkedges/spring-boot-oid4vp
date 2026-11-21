@@ -34,6 +34,17 @@ public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
     private final Oid4vpTransactionResultRepository transactionResultRepository;
     private final String successRedirectUri;
     private SecurityContextRepository securityContextRepository = new HttpSessionSecurityContextRepository();
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
+    }
+
+    /** The key a transaction's result is kept under: the transaction id, scoped to its tenant (unchanged for the default tenant). */
+    public static String scoped(String tenantId, String transactionId) {
+        return com.darkedges.oid4vp.spring.security.registration.Oid4vpRegistrationKey.of(tenantId, transactionId);
+    }
 
     public Oid4vpTransactionResultFilter(RequestMatcher requestMatcher, Oid4vpTransactionResultRepository transactionResultRepository) {
         this(requestMatcher, transactionResultRepository, null);
@@ -69,7 +80,12 @@ public class Oid4vpTransactionResultFilter extends OncePerRequestFilter {
             return;
         }
 
-        Optional<Authentication> authentication = transactionResultRepository.consume(transactionId, responseCode);
+        Optional<Authentication> authentication;
+        try {
+            authentication = transactionResultRepository.consume(scoped(tenantResolver.tenantId(request), transactionId), responseCode);
+        } catch (IllegalArgumentException e) {
+            authentication = Optional.empty();
+        }
         if (authentication.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;

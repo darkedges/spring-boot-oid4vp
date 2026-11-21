@@ -33,15 +33,22 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private final AuthorizationResponseValidator validator;
-    private final IssuerKeyResolver issuerKeyResolver;
+    private final Oid4vpIssuerTrust issuerTrust;
     private final RequestObjectSigningKeyResolver requestObjectSigningKeyResolver;
     private final Clock clock;
 
     public Oid4vpAuthorizationResponseAuthenticationProvider(
             AuthorizationResponseValidator validator, IssuerKeyResolver issuerKeyResolver,
             RequestObjectSigningKeyResolver requestObjectSigningKeyResolver, Clock clock) {
+        this(validator, Oid4vpIssuerTrust.everywhere(issuerKeyResolver), requestObjectSigningKeyResolver, clock);
+    }
+
+    /** Verifies each presentation against the issuers its tenant trusts. */
+    public Oid4vpAuthorizationResponseAuthenticationProvider(
+            AuthorizationResponseValidator validator, Oid4vpIssuerTrust issuerTrust,
+            RequestObjectSigningKeyResolver requestObjectSigningKeyResolver, Clock clock) {
         this.validator = validator;
-        this.issuerKeyResolver = issuerKeyResolver;
+        this.issuerTrust = issuerTrust;
         this.requestObjectSigningKeyResolver = requestObjectSigningKeyResolver;
         this.clock = clock;
     }
@@ -88,7 +95,9 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
             verified = validator.validate(
                     requestContext.dcqlQuery(), vpToken, requestContext.nonce(), expectedAudience,
                     requestContext.clientId().fullClientId(), requestContext.responseUri().toString(),
-                    responseEncryptionPublicJwk, issuerKeyResolver, clock);
+                    responseEncryptionPublicJwk,
+                    issuerTrust.forTenant(com.darkedges.oid4vp.spring.security.registration.Oid4vpRegistrationKey.tenantOf(requestContext.registrationId())),
+                    clock);
         } catch (Oid4vpException e) {
             throw new Oid4vpAuthenticationException(e.errorCode(), e.getMessage(), e);
         }
@@ -96,6 +105,7 @@ public class Oid4vpAuthorizationResponseAuthenticationProvider implements Authen
         Oid4vpPrincipal principal = new Oid4vpPrincipal(verified);
         Oid4vpAuthenticationToken authenticated = new Oid4vpAuthenticationToken(
                 principal, AuthorityUtils.NO_AUTHORITIES, requestContext.transactionId().orElse(null));
+        authenticated.setRegistrationKey(requestContext.registrationId());
         authenticated.setDetails(token.getDetails());
         return authenticated;
     }

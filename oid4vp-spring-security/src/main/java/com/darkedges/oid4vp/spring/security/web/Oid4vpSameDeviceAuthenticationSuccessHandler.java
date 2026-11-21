@@ -30,13 +30,20 @@ public class Oid4vpSameDeviceAuthenticationSuccessHandler implements Authenticat
     private static final int RESPONSE_CODE_BYTES = 16; // 128 bits
 
     private final Oid4vpTransactionResultRepository transactionResultRepository;
-    private final String resultBaseUri;
+    private final java.util.function.Function<HttpServletRequest, String> resultBaseUri;
     private final SecureRandom random = new SecureRandom();
 
     /** @param resultBaseUri e.g. {@code "https://verifier.example.org/oid4vp/result"} — the
      *                       transactionId and {@code ?response_code=} are appended to this. */
     public Oid4vpSameDeviceAuthenticationSuccessHandler(
             Oid4vpTransactionResultRepository transactionResultRepository, String resultBaseUri) {
+        this(transactionResultRepository, request -> resultBaseUri);
+    }
+
+    /** @param resultBaseUri the result URI base for this request's tenant */
+    public Oid4vpSameDeviceAuthenticationSuccessHandler(
+            Oid4vpTransactionResultRepository transactionResultRepository,
+            java.util.function.Function<HttpServletRequest, String> resultBaseUri) {
         this.transactionResultRepository = transactionResultRepository;
         this.resultBaseUri = resultBaseUri;
     }
@@ -54,9 +61,12 @@ public class Oid4vpSameDeviceAuthenticationSuccessHandler implements Authenticat
         }
 
         String responseCode = randomUrlSafeToken();
-        transactionResultRepository.save(transactionId.get(), responseCode, authentication);
+        // Kept for the tenant the presentation was made to: another tenant's result endpoint can't collect it.
+        String tenantId = authentication instanceof Oid4vpAuthenticationToken token ? token.tenantId()
+                : com.darkedges.oid4vp.spring.security.registration.Oid4vpRegistrationKey.DEFAULT_TENANT;
+        transactionResultRepository.save(Oid4vpTransactionResultFilter.scoped(tenantId, transactionId.get()), responseCode, authentication);
 
-        String redirectUri = resultBaseUri + "/" + transactionId.get() + "?response_code=" + responseCode;
+        String redirectUri = resultBaseUri.apply(request) + "/" + transactionId.get() + "?response_code=" + responseCode;
         writeJson(response, "{\"redirect_uri\":\"" + redirectUri + "\"}");
     }
 

@@ -44,7 +44,8 @@ public class Oid4vpWalletInvocationFilter extends OncePerRequestFilter {
 
     private final RequestMatcher requestMatcher;
     private final Oid4vpRelyingPartyRegistrationRepository registrations;
-    private final String requestUriBase;
+    private final java.util.function.Function<HttpServletRequest, String> requestUriBase;
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
 
     /** @param requestUriBase e.g. {@code "https://verifier.example.org/oid4vp/request"} — the
      *                        registrationId is appended to build the {@code request_uri} handed to the
@@ -52,9 +53,21 @@ public class Oid4vpWalletInvocationFilter extends OncePerRequestFilter {
      *                        {@link Oid4vpRequestObjectFilter} is actually hosted. */
     public Oid4vpWalletInvocationFilter(
             RequestMatcher requestMatcher, Oid4vpRelyingPartyRegistrationRepository registrations, String requestUriBase) {
+        this(requestMatcher, registrations, request -> requestUriBase);
+    }
+
+    /** @param requestUriBase the request_uri base for this request's tenant, such as {@code https://verifier.zkp.au/t/bank/oid4vp/request} */
+    public Oid4vpWalletInvocationFilter(
+            RequestMatcher requestMatcher, Oid4vpRelyingPartyRegistrationRepository registrations,
+            java.util.function.Function<HttpServletRequest, String> requestUriBase) {
         this.requestMatcher = requestMatcher;
         this.registrations = registrations;
         this.requestUriBase = requestUriBase;
+    }
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
     }
 
     @Override
@@ -67,8 +80,13 @@ public class Oid4vpWalletInvocationFilter extends OncePerRequestFilter {
         }
 
         String registrationId = result.getVariables().get("registrationId");
-        Optional<Oid4vpRelyingPartyRegistration> registration =
-                registrationId == null ? Optional.empty() : registrations.findByRegistrationId(registrationId);
+        Optional<Oid4vpRelyingPartyRegistration> registration;
+        try {
+            registration = registrationId == null ? Optional.empty()
+                    : registrations.findByRegistrationId(tenantResolver.registrationKey(request, registrationId));
+        } catch (IllegalArgumentException e) {
+            registration = Optional.empty();
+        }
         if (registration.isEmpty()) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;
@@ -80,7 +98,7 @@ public class Oid4vpWalletInvocationFilter extends OncePerRequestFilter {
             return;
         }
 
-        String requestUri = requestUriBase + "/" + registrationId;
+        String requestUri = requestUriBase.apply(request) + "/" + registrationId;
         String clientId = registration.get().clientId().fullClientId();
         String endpoint = walletAuthorizationEndpoint.get().toString();
         String separator = walletAuthorizationEndpoint.get().getQuery() == null ? "?" : "&";

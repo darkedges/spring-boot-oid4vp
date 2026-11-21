@@ -1,5 +1,10 @@
 package com.darkedges.oid4vp.spring.security.config;
 
+import java.util.function.Function;
+import jakarta.servlet.http.HttpServletRequest;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiOriginPolicy;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpTenantResolver;
+import com.darkedges.oid4vp.spring.security.authentication.Oid4vpIssuerTrust;
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.request.TokenEndpointClient;
@@ -52,6 +57,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private Oid4vpEphemeralEncryptionKeyRepository ephemeralEncryptionKeyRepository = new InMemoryOid4vpEphemeralEncryptionKeyRepository();
     private final Map<CredentialFormat, PresentationVerifier> presentationVerifiers = new HashMap<>();
     private IssuerKeyResolver issuerKeyResolver;
+    private Oid4vpIssuerTrust issuerTrust;
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
+    private Oid4vpDcApiOriginPolicy dcApiOriginPolicy = Oid4vpDcApiOriginPolicy.ANY;
     private ResponseDecryptionKeyResolver responseDecryptionKeyResolver;
     private Clock clock = Clock.systemUTC();
     private RequestMatcher requestMatcher = Oid4vpAuthorizationResponseAuthenticationFilter.defaultRequestMatcher();
@@ -63,11 +71,11 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private RequestMatcher requestObjectRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpRequestObjectFilter.DEFAULT_REQUEST_URI_PATTERN);
     private Oid4vpTransactionResultRepository transactionResultRepository;
-    private String sameDeviceResultBaseUri;
+    private Function<HttpServletRequest, String> sameDeviceResultBaseUri;
     private RequestMatcher transactionResultRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpTransactionResultFilter.DEFAULT_RESULT_URI_PATTERN);
     private String sameDeviceResultRedirectUri;
-    private String walletInvocationRequestUriBase;
+    private Function<HttpServletRequest, String> walletInvocationRequestUriBase;
     private RequestMatcher walletInvocationRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpWalletInvocationFilter.DEFAULT_INVOKE_URI_PATTERN);
     private TokenEndpointClient tokenEndpointClient;
@@ -110,6 +118,30 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     /** Enables {@code direct_post.jwt} (encrypted response) support by supplying the Verifier's private
      * response-decryption keys, per relying-party registration. */
+    /**
+     * The issuers each tenant trusts, instead of one {@link #issuerKeyResolver} for all: a presentation is verified only against its
+     * tenant's.
+     */
+    public Oid4vpLoginConfigurer<H> issuerTrust(Oid4vpIssuerTrust trust) {
+        this.issuerTrust = trust;
+        return this;
+    }
+
+    /**
+     * Makes the verifier multi-tenant: which tenant each request is for. Every registration, stored request, key and result is then
+     * the tenant's (see {@link com.darkedges.oid4vp.spring.security.registration.Oid4vpRegistrationKey}).
+     */
+    public Oid4vpLoginConfigurer<H> tenantResolver(Oid4vpTenantResolver resolver) {
+        this.tenantResolver = resolver;
+        return this;
+    }
+
+    /** Which browser origins may relay Digital Credentials API responses; any, unless set. */
+    public Oid4vpLoginConfigurer<H> dcApiOriginPolicy(Oid4vpDcApiOriginPolicy policy) {
+        this.dcApiOriginPolicy = policy;
+        return this;
+    }
+
     public Oid4vpLoginConfigurer<H> responseDecryptionKeyResolver(ResponseDecryptionKeyResolver resolver) {
         this.responseDecryptionKeyResolver = resolver;
         return this;
@@ -180,6 +212,12 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
      *                      absolute URI reachable by the End-User's browser.
      */
     public Oid4vpLoginConfigurer<H> sameDeviceHandoff(Oid4vpTransactionResultRepository repository, String resultBaseUri) {
+        return sameDeviceHandoff(repository, request -> resultBaseUri);
+    }
+
+    /** As {@link #sameDeviceHandoff(Oid4vpTransactionResultRepository, String)}, with the result base for each request's tenant. */
+    public Oid4vpLoginConfigurer<H> sameDeviceHandoff(Oid4vpTransactionResultRepository repository,
+                                                       Function<HttpServletRequest, String> resultBaseUri) {
         this.transactionResultRepository = repository;
         this.sameDeviceResultBaseUri = resultBaseUri;
         return this;
@@ -218,6 +256,11 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
      *                       {@link #requestUriPattern}).
      */
     public Oid4vpLoginConfigurer<H> walletInvocation(String requestUriBase) {
+        return walletInvocation(request -> requestUriBase);
+    }
+
+    /** As {@link #walletInvocation(String)}, with the {@code request_uri} base for each request's tenant. */
+    public Oid4vpLoginConfigurer<H> walletInvocation(Function<HttpServletRequest, String> requestUriBase) {
         this.walletInvocationRequestUriBase = requestUriBase;
         return this;
     }
@@ -261,8 +304,8 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
 
     @Override
     public void init(H http) {
-        if (issuerKeyResolver == null) {
-            throw new IllegalStateException("issuerKeyResolver must be configured via .issuerKeyResolver(...)");
+        if (issuerKeyResolver == null && issuerTrust == null) {
+            throw new IllegalStateException("issuerKeyResolver must be configured via .issuerKeyResolver(...) (or .issuerTrust(...))");
         }
         if (presentationVerifiers.isEmpty()) {
             throw new IllegalStateException("at least one presentationVerifier must be configured via .presentationVerifier(...)");
@@ -280,10 +323,12 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         AuthorizationResponseValidator validator = new AuthorizationResponseValidator(Map.copyOf(presentationVerifiers));
         ProviderManager authenticationManager = new ProviderManager(
                 new Oid4vpAuthorizationResponseAuthenticationProvider(
-                        validator, issuerKeyResolver, requestObjectSigningKeyResolver, clock));
+                        validator, issuerTrust != null ? issuerTrust : Oid4vpIssuerTrust.everywhere(issuerKeyResolver),
+                        requestObjectSigningKeyResolver, clock));
 
         Oid4vpAuthorizationResponseAuthenticationConverter converter = new Oid4vpAuthorizationResponseAuthenticationConverter(
                 authorizationRequestRepository, requestMatcher, responseDecryptionKeyResolver);
+        converter.setTenantResolver(tenantResolver);
         Oid4vpAuthorizationResponseAuthenticationFilter filter =
                 new Oid4vpAuthorizationResponseAuthenticationFilter(authenticationManager, requestMatcher, converter);
         if (transactionResultRepository != null) {
@@ -295,6 +340,8 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         if (dcApiEnabled) {
             Oid4vpDcApiAuthenticationConverter dcApiConverter = new Oid4vpDcApiAuthenticationConverter(
                     authorizationRequestRepository, dcApiRequestMatcher, responseDecryptionKeyResolver);
+            dcApiConverter.setTenantResolver(tenantResolver);
+            dcApiConverter.setOriginPolicy(dcApiOriginPolicy);
             Oid4vpAuthorizationResponseAuthenticationFilter dcApiFilter = new Oid4vpAuthorizationResponseAuthenticationFilter(
                     authenticationManager, dcApiRequestMatcher, dcApiConverter);
             http.addFilterBefore(dcApiFilter, UsernamePasswordAuthenticationFilter.class);
@@ -310,18 +357,21 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
                     ephemeralEncryptionKeyRepository, clock, requestTtl);
             Oid4vpRequestObjectFilter requestObjectFilter = new Oid4vpRequestObjectFilter(
                     requestObjectRequestMatcher, requestService, requestObjectSigningKeyResolver, requestObjectSigningAlgorithm);
+            requestObjectFilter.setTenantResolver(tenantResolver);
             http.addFilterBefore(requestObjectFilter, UsernamePasswordAuthenticationFilter.class);
         }
 
         if (transactionResultRepository != null) {
             Oid4vpTransactionResultFilter transactionResultFilter =
                     new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository, sameDeviceResultRedirectUri);
+            transactionResultFilter.setTenantResolver(tenantResolver);
             http.addFilterBefore(transactionResultFilter, UsernamePasswordAuthenticationFilter.class);
         }
 
         if (walletInvocationRequestUriBase != null) {
             Oid4vpWalletInvocationFilter walletInvocationFilter = new Oid4vpWalletInvocationFilter(
                     walletInvocationRequestMatcher, relyingPartyRegistrationRepository, walletInvocationRequestUriBase);
+            walletInvocationFilter.setTenantResolver(tenantResolver);
             http.addFilterBefore(walletInvocationFilter, UsernamePasswordAuthenticationFilter.class);
         }
 
@@ -329,6 +379,7 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
             Oid4vpAuthorizationCodeCallbackFilter authorizationCodeCallbackFilter = new Oid4vpAuthorizationCodeCallbackFilter(
                     authorizationCodeCallbackRequestMatcher, authenticationManager, authorizationRequestRepository,
                     relyingPartyRegistrationRepository, tokenEndpointClient, authorizationCodeSuccessRedirectUri);
+            authorizationCodeCallbackFilter.setTenantResolver(tenantResolver);
             http.addFilterBefore(authorizationCodeCallbackFilter, UsernamePasswordAuthenticationFilter.class);
         }
     }

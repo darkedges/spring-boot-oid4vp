@@ -36,6 +36,8 @@ public class Oid4vpDcApiAuthenticationConverter implements AuthenticationConvert
     private final Oid4vpAuthorizationRequestRepository requestRepository;
     private final RequestMatcher requestMatcher;
     private final ResponseDecryptionKeyResolver decryptionKeyResolver;
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
+    private Oid4vpDcApiOriginPolicy originPolicy = Oid4vpDcApiOriginPolicy.ANY;
 
     public Oid4vpDcApiAuthenticationConverter(
             Oid4vpAuthorizationRequestRepository requestRepository,
@@ -51,6 +53,10 @@ public class Oid4vpDcApiAuthenticationConverter implements AuthenticationConvert
         String origin = request.getHeader("Origin");
         if (origin == null || origin.isBlank()) {
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"Origin\" header");
+        }
+        // Only the verifier's own pages may relay a response: a presentation another origin asked for is bound to that origin.
+        if (!originPolicy.allows(request, extractRegistrationId(request), origin)) {
+            throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "this origin may not relay responses here");
         }
         String audienceOverride = "origin:" + origin;
 
@@ -109,11 +115,27 @@ public class Oid4vpDcApiAuthenticationConverter implements AuthenticationConvert
                         Oid4vpErrorCode.INVALID_REQUEST, "no response decryption key configured for registration: " + registrationId));
     }
 
+    /** The registration key (tenant and registration) of the registration this request's path names. */
     private String extractRegistrationId(HttpServletRequest request) {
         RequestMatcher.MatchResult result = requestMatcher.matcher(request);
-        return Optional.ofNullable(result.getVariables().get("registrationId"))
+        String registrationId = Optional.ofNullable(result.getVariables().get("registrationId"))
                 .orElseThrow(() -> new Oid4vpAuthenticationException(
                         Oid4vpErrorCode.INVALID_REQUEST, "could not resolve registrationId from request path"));
+        try {
+            return tenantResolver.registrationKey(request, registrationId);
+        } catch (IllegalArgumentException e) {
+            throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "unknown relying party registration");
+        }
+    }
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
+    }
+
+    /** Which origins may relay responses; any unless set. */
+    public void setOriginPolicy(Oid4vpDcApiOriginPolicy originPolicy) {
+        this.originPolicy = originPolicy;
     }
 
     private static JsonNode readJsonBody(HttpServletRequest request) {

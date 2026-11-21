@@ -71,10 +71,23 @@ public class Oid4vpAuthorizationCodeCallbackFilter extends AbstractAuthenticatio
         return PathPatternRequestMatcher.pathPattern(HttpMethod.GET, DEFAULT_CALLBACK_URI_PATTERN);
     }
 
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
+    }
+
     @Override
     public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) {
         RequestMatcher.MatchResult result = requestMatcher.matcher(request);
-        String registrationId = result.getVariables().get("registrationId");
+        String registrationId;
+        try {
+            // The registration key: this callback's tenant and registration.
+            registrationId = tenantResolver.registrationKey(request, result.getVariables().get("registrationId"));
+        } catch (IllegalArgumentException e) {
+            throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "unknown relying party registration");
+        }
 
         String state = request.getParameter("state");
         if (state == null || state.isBlank()) {

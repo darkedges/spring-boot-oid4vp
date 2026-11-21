@@ -72,6 +72,64 @@ AuthStack (`GET /api/auth/me`) whose it is.
 **Your application's security configuration must** let `/admin/api/**` through without a session or CSRF token (the controller checks
 the token itself), and enable CORS for the console's origin (`oid4vc.tenancy.admin.allowed-origins`).
 
+## A multi-tenant verifier
+
+**What a request is for.** The verifier's endpoints name a relying party by its id, as in `/login/oid4vp/direct-post/{registrationId}`.
+With tenancy, a request's tenant and that id together make the **registration key**, `<tenant>/<registrationId>`
+(`Oid4vpRegistrationKey`). The default tenant's key is just the id.
+
+**Everything is looked up by that key:**
+- the registration;
+- the stored request, so a `state` issued for one tenant's `login` is refused at another tenant's `login`;
+- the request-object signing key and the response decryption keys;
+- the ephemeral keys and the same-device result.
+
+A single-tenant verifier sees exactly the ids it always has. Wire the configurer through `Oid4vpTenancy`:
+
+```java
+.with(Oid4vpLoginConfigurer.oid4vpLogin(), c -> c
+        .tenantResolver(tenancy.tenantResolver())
+        .relyingPartyRegistrationRepository(tenancy.registrations(registrations))
+        .requestObjectSigningKeyResolver(tenancy.requestObjectSigningKeys(signingKeys))
+        .issuerTrust(tenancy.issuerTrust(issuerKeyResolver))
+        .dcApiOriginPolicy(tenancy.dcApiOriginPolicy())
+        .walletInvocation(tenancy.url("/oid4vp/request", requestUriBase))
+        .sameDeviceHandoff(results, tenancy.url("/oid4vp/result", resultBaseUri))
+        ...)
+```
+
+**The default tenant** (`oid4vc.tenancy.default-tenant.id`) is the verifier as it was: the application's registrations, signing key,
+issuer trust and URLs.
+
+**Every other tenant** has:
+- **its own registrations,** from its settings, with `response_uri`, `request_uri` and the result URL on the URL it was reached on;
+- **its own `request-object` key,** certified by the deployment's CA. The key's certificate gives it its own `x509_hash` client id;
+- **its own trust list:** a presentation from an issuer it doesn't list is refused;
+- **its own DC API origins:** a Digital Credentials API response is accepted only when relayed by the tenant's own origin, or one it
+  lists.
+
+**Its settings:**
+
+```json
+{
+  "registrations": {
+    "login": { "dcqlQuery": { "credentials": [ ... ] }, "responseMode": "direct_post",
+               "walletAuthorizationEndpoint": "openid4vp://authorize", "requestUriMethod": "get", "clientMetadata": { ... } }
+  },
+  "trustedIssuers": [
+    { "issuer": "https://issuer.zkp.au/t/bank", "jwksUri": "https://issuer.zkp.au/t/bank/jwks" },
+    { "issuer": "https://issuer.zkp.au", "x5cTrustAnchors": ["-----BEGIN CERTIFICATE-----..."] }
+  ],
+  "dcApiAllowedOrigins": ["https://app.bank.example"]
+}
+```
+
+- **A trusted issuer** gives its keys inline (`jwks`), as a JWKS URL (`jwksUri`, https, fetched at most every five minutes), or as CA
+  certificates (`x5cTrustAnchors`) that must have issued the credential's `x5c` leaf, which must be valid now.
+- **Invalid settings** are refused by the console's admin API.
+- **Without `Oid4vpTenancy`,** a verifier can still be multi-tenant by supplying its own `Oid4vpTenantResolver`, registration
+  repository and `Oid4vpIssuerTrust`, keyed by registration key.
+
 ## Configuration
 
 ```yaml

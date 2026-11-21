@@ -34,6 +34,17 @@
       <groupId>com.darkedges.oid4vp</groupId>
       <artifactId>oid4vp-format-mdoc</artifactId>
     </dependency>
+    <!-- Multi-tenancy: only active with oid4vc.tenancy.enabled=true (and this on the classpath). -->
+    <dependency>
+      <groupId>com.darkedges.oid4vp</groupId>
+      <artifactId>oid4vc-tenancy</artifactId>
+      <optional>true</optional>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.springframework.boot</groupId>
