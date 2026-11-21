@@ -40,6 +40,12 @@ public class Oid4vpRequestObjectFilter extends OncePerRequestFilter {
     private final Oid4vpAuthorizationRequestService requestService;
     private final RequestObjectSigningKeyResolver signingKeyResolver;
     private final JWSAlgorithm signingAlgorithm;
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
+    }
 
     public Oid4vpRequestObjectFilter(
             RequestMatcher requestMatcher,
@@ -62,7 +68,13 @@ public class Oid4vpRequestObjectFilter extends OncePerRequestFilter {
             return;
         }
 
-        String registrationId = result.getVariables().get("registrationId");
+        String registrationId;
+        try {
+            // The registration key: this request's tenant and the registration its path names.
+            registrationId = tenantResolver.registrationKey(request, result.getVariables().get("registrationId"));
+        } catch (IllegalArgumentException e) {
+            registrationId = null;
+        }
         if (registrationId == null) {
             response.setStatus(HttpServletResponse.SC_NOT_FOUND);
             return;

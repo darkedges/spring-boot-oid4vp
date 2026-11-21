@@ -1,1 +1,2 @@
 com.darkedges.oid4vp.spring.boot.autoconfigure.Oid4vpVerifierAutoConfiguration
+com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.Oid4vpVerifierTenancyAutoConfiguration

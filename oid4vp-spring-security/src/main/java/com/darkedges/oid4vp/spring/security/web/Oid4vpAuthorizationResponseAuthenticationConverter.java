@@ -26,6 +26,7 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
     private final Oid4vpAuthorizationRequestRepository requestRepository;
     private final RequestMatcher requestMatcher;
     private final ResponseDecryptionKeyResolver decryptionKeyResolver;
+    private Oid4vpTenantResolver tenantResolver = Oid4vpTenantResolver.SINGLE_TENANT;
 
     public Oid4vpAuthorizationResponseAuthenticationConverter(
             Oid4vpAuthorizationRequestRepository requestRepository,
@@ -98,10 +99,21 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
                         Oid4vpErrorCode.INVALID_REQUEST, "no response decryption key configured for registration: " + registrationId));
     }
 
+    /** The registration key (tenant and registration) of the registration this request's path names. */
     private String extractRegistrationId(HttpServletRequest request) {
         RequestMatcher.MatchResult result = requestMatcher.matcher(request);
-        return Optional.ofNullable(result.getVariables().get("registrationId"))
+        String registrationId = Optional.ofNullable(result.getVariables().get("registrationId"))
                 .orElseThrow(() -> new Oid4vpAuthenticationException(
                         Oid4vpErrorCode.INVALID_REQUEST, "could not resolve registrationId from request path"));
+        try {
+            return tenantResolver.registrationKey(request, registrationId);
+        } catch (IllegalArgumentException e) {
+            throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "unknown relying party registration");
+        }
+    }
+
+    /** Which tenant each request is for; single-tenant unless set. */
+    public void setTenantResolver(Oid4vpTenantResolver tenantResolver) {
+        this.tenantResolver = tenantResolver;
     }
 }
