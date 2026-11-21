@@ -81,7 +81,8 @@ public class Oid4vpAuthorizationCodeCallbackFilter extends AbstractAuthenticatio
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"state\" parameter");
         }
 
-        Oid4vpAuthorizationRequestContext context = requestRepository.consume(state)
+        // The state must belong to this callback's relying party: its token endpoint and client_id are used below.
+        Oid4vpAuthorizationRequestContext context = requestRepository.consume(state, registrationId)
                 .orElseThrow(() -> new Oid4vpAuthenticationException(
                         Oid4vpErrorCode.INVALID_REQUEST, "unknown or expired \"state\": " + state));
 

@@ -69,7 +69,10 @@ public class Oid4vpAuthorizationResponseAuthenticationConverter implements Authe
             throw new Oid4vpAuthenticationException(Oid4vpErrorCode.INVALID_REQUEST, "missing required \"state\" parameter");
         }
 
-        Oid4vpAuthorizationRequestContext context = requestRepository.consume(state)
+        // The state must belong to the relying party whose endpoint received it (when the endpoint names one).
+        Oid4vpAuthorizationRequestContext context = (requestMatcher == null
+                ? requestRepository.consume(state)
+                : requestRepository.consume(state, extractRegistrationId(request)))
                 .orElseThrow(() -> new Oid4vpAuthenticationException(
                         Oid4vpErrorCode.INVALID_REQUEST, "unknown or expired \"state\": " + state));
 
