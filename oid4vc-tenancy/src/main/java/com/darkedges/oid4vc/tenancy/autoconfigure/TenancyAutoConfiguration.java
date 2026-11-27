@@ -12,6 +12,8 @@ import com.darkedges.oid4vc.tenancy.admin.TenantAdminController;
 import com.darkedges.oid4vc.tenancy.admin.TenantAdministration;
 import com.darkedges.oid4vc.tenancy.admin.TenantSettingsValidator;
 import com.darkedges.oid4vc.tenancy.domains.AuthStackDomainDirectory;
+import com.darkedges.oid4vc.tenancy.tenantapi.AuthStackTenantCallers;
+import com.darkedges.oid4vc.tenancy.tenantapi.TenantCallers;
 import com.darkedges.oid4vc.tenancy.domains.DomainDirectory;
 import com.darkedges.oid4vc.tenancy.domains.StaticDomainDirectory;
 import com.darkedges.oid4vc.tenancy.keys.InMemoryTenantKeyRepository;
@@ -101,6 +103,22 @@ public class TenancyAutoConfiguration {
     @ConditionalOnMissingBean
     public TenantKeyService tenantKeyService(TenantKeyRepository keys, TenantCertificateAuthority authority, TenancyProperties properties) {
         return new TenantKeyService(keys, authority, properties.getKeys().getPurposes());
+    }
+
+    /**
+     * Who may call the tenant APIs: applications of the tenant's own AuthStack environment, listed in its settings
+     * ({@code tenantApi.clients}). Without AuthStack's API URL nobody may: every call is refused, so a tenant API is never left open.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    public TenantCallers tenantCallers(TenancyProperties properties) {
+        URI api = properties.getAuthstack().getApiUrl();
+        if (api == null) {
+            return (token, tenant) -> {
+                throw new TenantCallers.TenantCallerException(401, "Tenant APIs are off: oid4vc.tenancy.authstack.api-url is not set");
+            };
+        }
+        return new AuthStackTenantCallers(api);
     }
 
     @Bean

@@ -72,6 +72,26 @@ AuthStack (`GET /api/auth/me`) whose it is.
 **Your application's security configuration must** let `/admin/api/**` through without a session or CSRF token (the controller checks
 the token itself), and enable CORS for the console's origin (`oid4vc.tenancy.admin.allowed-origins`).
 
+## Tenant APIs (for the tenant's own backend)
+
+The admin API is a person in the AuthStack console. A **tenant API** is the tenant's own backend calling a service as the tenant, machine
+to machine: for example, the bank creating credential offers on the issuer. `TenantCallers` decides who may call one.
+
+**`AuthStackTenantCallers`** accepts a client-credentials access token from an application of the **tenant's own** AuthStack environment
+`E` only when:
+- **its signature** verifies (RS256) with a key of `E`, from `<api>/E/as/jwks`. A token of any other environment fails the signature
+  itself, not only a claim comparison. Keys are cached, and fetched again when a token names one not seen yet (rotation);
+- **its claims** are right: `iss` is `<api>/E/as`, it hasn't expired, `type` is `client_credentials` and `environmentId` is `E`;
+- **its application** (`client_id`) is listed in the tenant's settings. Any application of the environment could otherwise call, so an
+  empty or missing list allows nobody:
+
+```json
+{ "tenantApi": { "clients": ["<application id>"] } }
+```
+
+Refusals are `401 invalid_token`, or `403 insufficient_scope` for an unlisted application. Use a **dedicated** worker application with no
+roles for this; a worker that manages users shouldn't carry these calls. Without `oid4vc.tenancy.authstack.api-url`, every call is refused.
+
 ## A multi-tenant verifier
 
 **What a request is for.** The verifier's endpoints name a relying party by its id, as in `/login/oid4vp/direct-post/{registrationId}`.
