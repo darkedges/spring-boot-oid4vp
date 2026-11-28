@@ -4,6 +4,17 @@
 # than a docker-compose-internal hostname — this pair is meant to work as if operated by two independent
 # parties, not just two containers on one private network.
 demo:
+  # Deployed, the demo signs with a key of its own, never the one published with the source (DemoVerifierSigningKeyConfig). Set
+  # DEMO_SIGNING_KEYSTORE and DEMO_SIGNING_KEYSTORE_PASSWORD (docker-compose.cloudflare.yml). The registrations' client ids and
+  # verifier_info below are written for the published key and follow yours automatically (DemoVerifierIdentity).
+  signing:
+    require-external-key: true
+  # Only these issuers' credentials are accepted. A conformance test run, whose credentials carry the suite's own certificates, needs
+  # DEMO_TRUST_ANY_CERTIFICATE=true for its duration.
+  trust-any-certificate: false
+  trusted-issuers: >
+    [{"issuer":"https://issuer.zkp.au","jwksUri":"https://issuer.zkp.au/jwks"},
+    {"issuer":"https://wallet.zkp.au","jwksUri":"https://wallet.zkp.au/issuer-jwks"}]
   wallet-base-url: https://wallet.zkp.au
   wallet-base-url-for-browser: https://wallet.zkp.au
   same-device-result-base-uri: https://verify.irving.au/oid4vp/result

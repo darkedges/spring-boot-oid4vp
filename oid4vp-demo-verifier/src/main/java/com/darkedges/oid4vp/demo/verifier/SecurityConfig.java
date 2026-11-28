@@ -1,5 +1,6 @@
 package com.darkedges.oid4vp.demo.verifier;
 
+import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.TrustListIssuerKeyResolver;
 import org.springframework.beans.factory.ObjectProvider;
 import com.darkedges.oid4vp.verifier.jdbc.VerifierEntryTable;
 import com.darkedges.oid4vp.verifier.jdbc.JdbcVerifierStores;
@@ -158,8 +159,22 @@ public class SecurityConfig {
         };
     }
 
+    /**
+     * Which issuers the default tenant trusts. Local development ({@code demo.trust-any-certificate}, on unless configured off) takes
+     * the key from any credential's own certificate, or the demo Wallet's: anyone can issue such a credential. A deployment turns that
+     * off and lists its issuers in {@code demo.trusted-issuers}, a JSON array as in a tenant's {@code trustedIssuers}.
+     */
     @Bean
-    public IssuerKeyResolver issuerKeyResolver(@Value("${demo.wallet-base-url}") String walletBaseUrl) {
+    public IssuerKeyResolver issuerKeyResolver(@Value("${demo.wallet-base-url}") String walletBaseUrl,
+                                               @Value("${demo.trust-any-certificate:true}") boolean trustAnyCertificate,
+                                               @Value("${demo.trusted-issuers:[]}") String trustedIssuers) throws Exception {
+        if (!trustAnyCertificate) {
+            var listed = TrustListIssuerKeyResolver.read(new ObjectMapper().readTree(trustedIssuers));
+            if (listed.isEmpty()) log.warn("demo.trusted-issuers is empty: no presentation will be accepted");
+            return new TrustListIssuerKeyResolver(listed,
+                    java.net.http.HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(5)).build(), java.time.Clock.systemUTC());
+        }
+        log.warn("demo.trust-any-certificate is on: a credential is trusted for the certificate it brings. For development only.");
         RestClient restClient = RestClient.create();
         ObjectMapper mapper = new ObjectMapper();
         String jwksUri = walletBaseUrl + "/issuer-jwks";
