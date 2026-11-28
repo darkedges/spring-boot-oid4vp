@@ -136,6 +136,28 @@ class MdocVerifierTest {
                 .hasMessageContaining("COSE_Sign1 signature verification failed");
     }
 
+    @Test
+    void rejectsADocumentOfATypeTheQueryDidNotAskFor() throws Exception {
+        KeyPair issuerKeys = TestMdocFixtures.generateEcKeyPair();
+        KeyPair deviceKeys = TestMdocFixtures.generateEcKeyPair();
+        JsonNode encryptionJwk = TestMdocFixtures.publicJwk(TestMdocFixtures.generateEcKeyPair().getPublic());
+        Instant now = Instant.parse("2026-01-01T00:00:00Z");
+        String presentation = buildDeviceResponse(
+                issuerKeys, deviceKeys, encryptionJwk, now, java.util.Map.of("given_name", "Jean"));
+        CredentialQuery query = CredentialQuery.builder("mdl", CredentialFormat.MSO_MDOC)
+                .meta(new MsoMdocMeta("org.iso.18013.5.1.other"))
+                .build();
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) ->
+                Optional.of(TestMdocFixtures.publicJwk(issuerKeys.getPublic()));
+        PresentationVerificationParams params = new PresentationVerificationParams(
+                query, NONCE, CLIENT_ID, CLIENT_ID, RESPONSE_URI, Optional.of(encryptionJwk),
+                issuerKeyResolver, Clock.fixed(now, ZoneOffset.UTC));
+
+        assertThatThrownBy(() -> new MdocVerifier().verify(new PresentationEntry.StringPresentation(presentation), params))
+                .isInstanceOf(MdocVerificationException.class)
+                .hasMessageContaining("docType");
+    }
+
     private static String buildDeviceResponseWithUnwrappedDeviceAuthSignature(
             KeyPair issuerKeys, KeyPair deviceKeys, JsonNode encryptionJwk, Instant now, java.util.Map<String, String> claims)
             throws Exception {
