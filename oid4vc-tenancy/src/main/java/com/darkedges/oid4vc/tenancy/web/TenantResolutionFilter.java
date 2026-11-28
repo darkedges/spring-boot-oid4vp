@@ -2,7 +2,9 @@ package com.darkedges.oid4vc.tenancy.web;
 
 import com.darkedges.oid4vc.tenancy.TenantContext;
 import com.darkedges.oid4vc.tenancy.TenantResolver;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
+import jakarta.servlet.RequestDispatcher;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletRequestWrapper;
@@ -80,7 +82,11 @@ public final class TenantResolutionFilter extends OncePerRequestFilter {
         return false;
     }
 
-    /** The request as a single-tenant deployment would have received it: the {@code /t/<slug>} part removed from its path. */
+    /**
+     * The request as a single-tenant deployment would have received it: the {@code /t/<slug>} part removed from its path. Only for
+     * the request itself: on a forward or an error dispatch the container changes the path beneath this wrapper, and that new path
+     * is the answer.
+     */
     static final class TenantPathRequest extends HttpServletRequestWrapper {
 
         private final String contextPath;
@@ -92,14 +98,30 @@ public final class TenantResolutionFilter extends OncePerRequestFilter {
             this.path = path;
         }
 
+        private boolean dispatchedElsewhere() {
+            DispatcherType type = getDispatcherType();
+            return type == DispatcherType.FORWARD || type == DispatcherType.ERROR;
+        }
+
+        /**
+         * A relative dispatch (the welcome page forwards to {@code index.html}) is resolved against the path the application sees.
+         * The container would resolve it against {@code /t/<slug>/…}, which no rule or mapping of the application matches.
+         */
+        @Override
+        public RequestDispatcher getRequestDispatcher(String target) {
+            if (target == null || target.startsWith("/") || dispatchedElsewhere()) return super.getRequestDispatcher(target);
+            return super.getRequestDispatcher(path.substring(0, path.lastIndexOf('/') + 1) + (path.contains("/") ? "" : "/") + target);
+        }
+
         @Override
         public String getRequestURI() {
-            return contextPath + path;
+            return dispatchedElsewhere() ? super.getRequestURI() : contextPath + path;
         }
 
         @Override
         public StringBuffer getRequestURL() {
             StringBuffer original = super.getRequestURL();
+            if (dispatchedElsewhere()) return original;
             String originalUri = super.getRequestURI();
             int at = original.lastIndexOf(originalUri);
             return at < 0 ? original : new StringBuffer(original.substring(0, at)).append(getRequestURI());
@@ -107,12 +129,12 @@ public final class TenantResolutionFilter extends OncePerRequestFilter {
 
         @Override
         public String getServletPath() {
-            return path;
+            return dispatchedElsewhere() ? super.getServletPath() : path;
         }
 
         @Override
         public String getPathInfo() {
-            return null;
+            return dispatchedElsewhere() ? super.getPathInfo() : null;
         }
     }
 }

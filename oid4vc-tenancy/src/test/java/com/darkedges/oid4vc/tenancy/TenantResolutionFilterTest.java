@@ -2,6 +2,7 @@ package com.darkedges.oid4vc.tenancy;
 
 import com.darkedges.oid4vc.tenancy.domains.DomainDirectory;
 import com.darkedges.oid4vc.tenancy.web.TenantResolutionFilter;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -50,6 +51,38 @@ class TenantResolutionFilterTest {
         MockFilterChain chain = new MockFilterChain();
         filter.doFilter(request("issuer.zkp.au", "/.well-known/openid-credential-issuer/t/shop"), new MockHttpServletResponse(), chain);
         assertThat(((HttpServletRequest) chain.getRequest()).getRequestURI()).isEqualTo("/.well-known/openid-credential-issuer");
+    }
+
+    @Test
+    void aForwardOrErrorDispatchSeesWhereItWasSentNotTheOriginalPath() throws Exception {
+        for (DispatcherType dispatch : List.of(DispatcherType.FORWARD, DispatcherType.ERROR)) {
+            MockHttpServletRequest original = request("issuer.zkp.au", "/t/shop/");
+            MockFilterChain chain = new MockFilterChain();
+            filter.doFilter(original, new MockHttpServletResponse(), chain);
+            HttpServletRequest seen = (HttpServletRequest) chain.getRequest();
+            assertThat(seen.getServletPath()).isEqualTo("/");
+
+            // The container keeps this wrapper and changes the request beneath it: a forward has to see where it was sent.
+            original.setDispatcherType(dispatch);
+            original.setRequestURI("/index.html");
+            original.setServletPath("/index.html");
+            assertThat(seen.getRequestURI()).isEqualTo("/index.html");
+            assertThat(seen.getServletPath()).isEqualTo("/index.html");
+            assertThat(seen.getRequestURL().toString()).endsWith("/index.html");
+            assertThat(TenantContext.require(seen).baseUrl()).isEqualTo("https://issuer.zkp.au/t/shop");
+        }
+    }
+
+    @Test
+    void aRelativeDispatchIsResolvedAgainstThePathTheApplicationSees() throws Exception {
+        for (String[] each : new String[][] {{"/t/shop/", "/index.html"}, {"/t/shop", "/index.html"}, {"/t/shop/demo/page", "/demo/index.html"}}) {
+            MockFilterChain chain = new MockFilterChain();
+            filter.doFilter(request("issuer.zkp.au", each[0]), new MockHttpServletResponse(), chain);
+            MockHttpServletResponse forwarded = new MockHttpServletResponse();
+            HttpServletRequest seen = (HttpServletRequest) chain.getRequest();
+            seen.getRequestDispatcher("index.html").forward(seen, forwarded);
+            assertThat(forwarded.getForwardedUrl()).as(each[0]).isEqualTo(each[1]);
+        }
     }
 
     @Test
