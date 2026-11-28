@@ -8,62 +8,93 @@ import com.nimbusds.jose.jwk.ECKey;
 import com.nimbusds.jose.util.Base64;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.interfaces.ECPrivateKey;
 import java.security.interfaces.ECPublicKey;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
 /**
- * Loads a static EC key + certificate ({@code demo-verifier-signing-key.p12}, checked into resources: a
- * leaf cert with SANs {@code localhost}/{@code verifier}/{@code verify.irving.au}, issued by a self-signed
- * demo CA also stored in the same keystore — the leaf itself is <em>not</em> self-signed, since
- * HAIP-conformant Wallets reject a self-signed leaf) used to sign the Authorization Request Object hosted
- * at {@code /oid4vp/request/{registrationId}} — required for the {@code x509_hash} Client Identifier
- * Prefix (see {@code application.yml}'s {@code client-id}), since unlike {@code redirect_uri:}, that
- * scheme requires signed requests, verified by the Wallet directly against the leaf certificate carried in
- * the request's {@code x5c} JWS header. The {@code x5c} header carries only the leaf, not the CA: the demo
- * CA is registered out-of-band as the Wallet/conformance suite's trust anchor, and HAIP's x5c validation
- * rejects a chain that includes the trust anchor certificate itself.
+ * The EC key and certificate that sign the Authorization Request Object hosted at {@code /oid4vp/request/{registrationId}}, which the
+ * {@code x509_hash} Client Identifier Prefix requires: a Wallet verifies the signature against the leaf certificate in the request's
+ * {@code x5c} header.
  *
- * <p>Not a pattern to copy for a real Verifier — a real deployment would use a certificate issued by a CA
- * relying Wallets actually trust, not a throwaway demo CA baked into the jar. If this keystore is ever
- * regenerated, every registration's {@code client-id} (the leaf's {@code x509_hash}) must be recomputed
- * to match — see {@code application.yml}'s {@code demo} registration for the exact derivation.
+ * <ul>
+ *   <li><b>For local development,</b> {@code demo-verifier-signing-key.p12} from this module's resources: a leaf (SANs
+ *       {@code localhost}/{@code verifier}) issued by a demo CA. <b>Its private key is published with this source</b>, so a signature
+ *       by it proves nothing about who sent a request.</li>
+ *   <li><b>Deployed,</b> your own: {@code demo.signing.keystore} (a PKCS#12 file, entry {@code demo-verifier-signing}, kept outside
+ *       the source tree) and {@code demo.signing.keystore-password}. With {@code demo.signing.require-external-key=true}, as the
+ *       {@code cloudflare} profile sets, the application refuses to start without one, or with the published one.</li>
+ * </ul>
  *
- * <p>Built via plain {@link KeyStore} rather than Nimbus's {@code ECKey.load(KeyStore, ...)}: that
- * convenience method reaches for BouncyCastle internally, and this project has no BouncyCastle dependency
- * (JDK 21's native EC support covers everything else) — not worth adding one just for this.
+ * <p>The {@code x5c} header carries only the leaf, not the CA: HAIP's x5c validation rejects a chain that includes the trust anchor,
+ * which a Wallet is expected to know already. With a key of your own, {@link DemoVerifierIdentity} makes the registrations'
+ * {@code x509_hash} client ids match it.
+ *
+ * <p>Built via plain {@link KeyStore} rather than Nimbus's {@code ECKey.load(KeyStore, ...)}: that convenience method reaches for
+ * BouncyCastle internally, and this project has no BouncyCastle dependency.
  */
 @Configuration
 public class DemoVerifierSigningKeyConfig {
 
-    private static final String KEYSTORE_RESOURCE = "/demo-verifier-signing-key.p12";
+    private static final String PUBLISHED_KEYSTORE = "/demo-verifier-signing-key.p12";
     private static final String ALIAS = "demo-verifier-signing";
-    private static final char[] PASSWORD = "changeit".toCharArray();
+    private static final char[] PUBLISHED_PASSWORD = "changeit".toCharArray();
 
     @Bean
-    public ECKey demoVerifierSigningKey() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("PKCS12");
-        try (InputStream in = DemoVerifierSigningKeyConfig.class.getResourceAsStream(KEYSTORE_RESOURCE)) {
-            keyStore.load(in, PASSWORD);
+    public ECKey demoVerifierSigningKey(Environment environment) throws Exception {
+        String file = environment.getProperty("demo.signing.keystore", "");
+        boolean required = environment.getProperty("demo.signing.require-external-key", Boolean.class, false);
+        if (file.isBlank()) {
+            if (required) {
+                throw new IllegalStateException("This deployment needs its own request signing key: set demo.signing.keystore "
+                        + "(DEMO_SIGNING_KEYSTORE) and demo.signing.keystore-password. The key shipped with the source is public.");
+            }
+            return published();
         }
+        ECKey own;
+        try (InputStream in = Files.newInputStream(Path.of(file))) {
+            own = load(in, environment.getProperty("demo.signing.keystore-password", "").toCharArray());
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read the request signing keystore " + file + ": " + e.getMessage(), e);
+        }
+        if (required && Arrays.equals(own.toECPublicKey().getEncoded(), published().toECPublicKey().getEncoded())) {
+            throw new IllegalStateException("demo.signing.keystore holds the key shipped with the source, which is public: "
+                    + "generate a new one");
+        }
+        return own;
+    }
 
-        ECPrivateKey privateKey = (ECPrivateKey) keyStore.getKey(ALIAS, PASSWORD);
-        // Leaf only, not the full chain: the demo CA is registered out-of-band as the conformance suite's
-        // trust anchor, and HAIP's x5c validation rejects a chain that includes the trust anchor itself
-        // (OID4VP-1FINAL-5.9.3 ValidateRequestObjectSignatureAgainstX5cHeader).
-        Certificate leaf = keyStore.getCertificateChain(ALIAS)[0];
+    static ECKey published() throws Exception {
+        try (InputStream in = DemoVerifierSigningKeyConfig.class.getResourceAsStream(PUBLISHED_KEYSTORE)) {
+            return load(in, PUBLISHED_PASSWORD);
+        }
+    }
+
+    private static ECKey load(InputStream in, char[] password) throws Exception {
+        KeyStore keyStore = KeyStore.getInstance("PKCS12");
+        keyStore.load(in, password);
+        ECPrivateKey privateKey = (ECPrivateKey) keyStore.getKey(ALIAS, password);
+        Certificate[] chain = keyStore.getCertificateChain(ALIAS);
+        if (privateKey == null || chain == null) {
+            throw new IllegalStateException("the keystore has no private key entry \"" + ALIAS + "\"");
+        }
+        // Leaf only, not the full chain (OID4VP 1.0 section 5.9.3, and HAIP's x5c validation).
+        Certificate leaf = chain[0];
         ECPublicKey publicKey = (ECPublicKey) leaf.getPublicKey();
-        List<Base64> x5c = List.of(Base64.encode(leaf.getEncoded()));
-
         return new ECKey.Builder(Curve.P_256, publicKey)
                 .privateKey(privateKey)
                 .keyID(ALIAS)
-                .x509CertChain(x5c)
+                .x509CertChain(List.of(Base64.encode(leaf.getEncoded())))
                 .build();
     }
 

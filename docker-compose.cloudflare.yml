@@ -16,9 +16,17 @@ services:
       - SPRING_PROFILES_ACTIVE=cloudflare
 
   verifier:
+    volumes:
+      - ${DEMO_KEYS_DIR:-./demo-keys}:/demo-keys:ro
     environment:
       - SPRING_PROFILES_ACTIVE=cloudflare
       - DEMO_EMPLOYER_NAME=ZKP
+      # The verifier's own request signing key (entry "demo-verifier-signing" of a PKCS#12 file), required: put verifier.p12 in
+      # DEMO_KEYS_DIR, outside this repository, and give its password in your shell or an untracked .env.
+      - DEMO_SIGNING_KEYSTORE=/demo-keys/verifier.p12
+      - DEMO_SIGNING_KEYSTORE_PASSWORD
+      # true only for a conformance test run (see application-cloudflare.yml).
+      - DEMO_TRUST_ANY_CERTIFICATE
       # A conformance test run's exported authorization_endpoint — set this to enable
       # GET /oid4vp/invoke/conformance, which redirects a browser there with client_id/request_uri
       # attached. See README: "Invoking a Wallet". Deliberately only set here (not in docker-compose.yml):

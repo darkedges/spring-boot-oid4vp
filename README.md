@@ -187,6 +187,19 @@ its published port on `localhost` either way. If you rename the services in `doc
 
 ### Hosting behind Cloudflare
 
+**A deployment needs its own signing key.** The keys in this repository are for local development: anyone can read them. Under the
+`cloudflare` profile the verifier refuses to start without yours. Make one outside the repository, in the directory you give as
+`DEMO_KEYS_DIR`:
+
+```bash
+keytool -genkeypair -alias demo-verifier-signing -keyalg EC -groupname secp256r1 -dname "CN=<your verifier>" \
+  -ext "SAN=dns:<your verifier's host>" -validity 730 -storetype PKCS12 -keystore "$DEMO_KEYS_DIR/verifier.p12"
+```
+
+Set `DEMO_SIGNING_KEYSTORE_PASSWORD` to its password. HAIP-conformant wallets reject a self-signed leaf: for them, issue the
+certificate from a CA they trust. The deployed verifier also accepts credentials only from the issuers it lists
+(`demo.trusted-issuers` in `application-cloudflare.yml`).
+
 To expose the demo publicly — e.g. Wallet on `wallet.zkp.au`, Verifier on `verify.irving.au` — activate the
 **`cloudflare`** Spring profile instead of (not in addition to) `docker`:
 

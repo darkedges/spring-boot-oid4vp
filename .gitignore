@@ -15,3 +15,5 @@ conformance/__pycache__/
 
 # docker-compose.tenancy.yml mounts the tenant CA from here when TENANT_CA_DIR is unset; never commit a CA.
 tenant-ca/
+# Where docker-compose.cloudflare.yml looks for deployment signing keys when DEMO_KEYS_DIR is unset; never commit one.
+demo-keys/
