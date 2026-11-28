@@ -1,5 +1,6 @@
 package com.darkedges.oid4vp.demo.verifier;
 
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactions;
 import org.springframework.beans.factory.ObjectProvider;
 import com.darkedges.oid4vp.verifier.jdbc.VerifierEntryTable;
 import com.darkedges.oid4vp.verifier.jdbc.JdbcVerifierStores;
@@ -85,7 +86,8 @@ public class SecurityConfig {
             TokenEndpointClient tokenEndpointClient,
             @Value("${demo.same-device-result-base-uri:http://localhost:8090/oid4vp/result}") String sameDeviceResultBaseUri,
             @Value("${demo.request-uri-base:http://localhost:8090/oid4vp/request}") String requestUriBase,
-            ObjectProvider<Oid4vpTenancy> tenancyProvider)
+            ObjectProvider<Oid4vpTenancy> tenancyProvider,
+            ObjectProvider<Oid4vpTransactions> transactionsProvider)
             throws Exception {
         // With the "tenancy" profile, every tenant is served: the default tenant (irving) by this application's own registrations,
         // keys and trust, each other tenant from its settings. Without it, Oid4vpTenancy is absent and these are the plain beans.
@@ -101,6 +103,9 @@ public class SecurityConfig {
         java.util.function.Function<jakarta.servlet.http.HttpServletRequest, String> requestBase = tenancy == null
                 ? request -> requestUriBase : tenancy.url("/oid4vp/request", requestUriBase);
 
+        // With tenancy, a tenant's backend can ask for presentations and collect the results (/tenant-api/v1/transactions).
+        Oid4vpTransactions transactions = transactionsProvider.getIfAvailable();
+
         http.csrf(csrf -> csrf.disable())
                 // CORS for the AuthStack console's calls to the tenancy admin API (oid4vc.tenancy.admin.allowed-origins); none otherwise.
                 .cors(org.springframework.security.config.Customizer.withDefaults())
@@ -110,8 +115,11 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         // The tenancy admin API checks the AuthStack console token itself, with AuthStack.
                         .requestMatchers("/admin/api/**").permitAll()
+                        // The tenant API checks the calling application's token itself, against the tenant's AuthStack environment.
+                        .requestMatchers("/tenant-api/**").permitAll()
                         .anyRequest().authenticated())
                 .with(Oid4vpLoginConfigurer.oid4vpLogin(), configurer -> configurer
+                        .transactions(transactions)
                         .tenantResolver(tenantResolver)
                         .relyingPartyRegistrationRepository(effectiveRegistrations)
                         .authorizationRequestRepository(requestRepository)

@@ -2,6 +2,7 @@ package com.darkedges.oid4vp.spring.security.config;
 
 import java.util.function.Function;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiOriginPolicy;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTenantResolver;
 import com.darkedges.oid4vp.spring.security.authentication.Oid4vpIssuerTrust;
@@ -24,15 +25,19 @@ import com.darkedges.oid4vp.spring.security.web.Oid4vpAuthorizationResponseAuthe
 import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiAuthenticationConverter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpRequestObjectFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpSameDeviceAuthenticationSuccessHandler;
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactions;
+import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionRequestFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultFilter;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTransactionResultRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpWalletInvocationFilter;
 import com.darkedges.oid4vp.verifier.AuthorizationResponseValidator;
 import com.nimbusds.jose.JWSAlgorithm;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.config.annotation.web.HttpSecurityBuilder;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -41,6 +46,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * {@code HttpSecurity} DSL extension registering the OpenID4VP Verifier {@code direct_post} response
@@ -79,6 +85,9 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
     private RequestMatcher walletInvocationRequestMatcher =
             PathPatternRequestMatcher.pathPattern(Oid4vpWalletInvocationFilter.DEFAULT_INVOKE_URI_PATTERN);
     private TokenEndpointClient tokenEndpointClient;
+    private Oid4vpTransactions transactions;
+    private RequestMatcher transactionRequestMatcher =
+            PathPatternRequestMatcher.pathPattern(Oid4vpTransactionRequestFilter.DEFAULT_PATTERN);
     private String authorizationCodeSuccessRedirectUri;
     private RequestMatcher authorizationCodeCallbackRequestMatcher = Oid4vpAuthorizationCodeCallbackFilter.defaultRequestMatcher();
 
@@ -302,6 +311,16 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         return this;
     }
 
+    /**
+     * Serves presentations an application's backend asks for ({@link Oid4vpTransactions}): hosts each one's signed request at
+     * {@code /oid4vp/transaction-request/{requestId}}, and keeps a verified response as its result for the backend to collect, without
+     * signing any browser in. Requires {@link #requestObjectSigningKeyResolver}. The backend's own API is the application's to add.
+     */
+    public Oid4vpLoginConfigurer<H> transactions(Oid4vpTransactions transactions) {
+        this.transactions = transactions;
+        return this;
+    }
+
     @Override
     public void init(H http) {
         if (issuerKeyResolver == null && issuerTrust == null) {
@@ -316,25 +335,26 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
         if (tokenEndpointClient != null && relyingPartyRegistrationRepository == null) {
             throw new IllegalStateException("relyingPartyRegistrationRepository must be configured to use .authorizationCodeCallback(...)");
         }
+        if (transactions != null && requestObjectSigningKeyResolver == null) {
+            throw new IllegalStateException("requestObjectSigningKeyResolver must be configured to use .transactions(...)");
+        }
     }
 
     @Override
     public void configure(H http) {
         AuthorizationResponseValidator validator = new AuthorizationResponseValidator(Map.copyOf(presentationVerifiers));
-        ProviderManager authenticationManager = new ProviderManager(
+        AuthenticationManager verifying = new ProviderManager(
                 new Oid4vpAuthorizationResponseAuthenticationProvider(
                         validator, issuerTrust != null ? issuerTrust : Oid4vpIssuerTrust.everywhere(issuerKeyResolver),
                         requestObjectSigningKeyResolver, clock));
+        AuthenticationManager authenticationManager = transactions == null ? verifying : transactions.recording(verifying);
 
         Oid4vpAuthorizationResponseAuthenticationConverter converter = new Oid4vpAuthorizationResponseAuthenticationConverter(
                 authorizationRequestRepository, requestMatcher, responseDecryptionKeyResolver);
         converter.setTenantResolver(tenantResolver);
         Oid4vpAuthorizationResponseAuthenticationFilter filter =
                 new Oid4vpAuthorizationResponseAuthenticationFilter(authenticationManager, requestMatcher, converter);
-        if (transactionResultRepository != null) {
-            filter.setAuthenticationSuccessHandler(
-                    new Oid4vpSameDeviceAuthenticationSuccessHandler(transactionResultRepository, sameDeviceResultBaseUri));
-        }
+        successHandler().ifPresent(filter::setAuthenticationSuccessHandler);
         http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class);
 
         if (dcApiEnabled) {
@@ -361,6 +381,13 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
             http.addFilterBefore(requestObjectFilter, UsernamePasswordAuthenticationFilter.class);
         }
 
+        if (transactions != null) {
+            Oid4vpTransactionRequestFilter transactionRequestFilter = new Oid4vpTransactionRequestFilter(
+                    transactionRequestMatcher, transactions, requestObjectSigningKeyResolver, requestObjectSigningAlgorithm);
+            transactionRequestFilter.setTenantResolver(tenantResolver);
+            http.addFilterBefore(transactionRequestFilter, UsernamePasswordAuthenticationFilter.class);
+        }
+
         if (transactionResultRepository != null) {
             Oid4vpTransactionResultFilter transactionResultFilter =
                     new Oid4vpTransactionResultFilter(transactionResultRequestMatcher, transactionResultRepository, sameDeviceResultRedirectUri);
@@ -382,6 +409,26 @@ public final class Oid4vpLoginConfigurer<H extends HttpSecurityBuilder<H>> exten
             authorizationCodeCallbackFilter.setTenantResolver(tenantResolver);
             http.addFilterBefore(authorizationCodeCallbackFilter, UsernamePasswordAuthenticationFilter.class);
         }
+    }
+
+    /**
+     * What a verified {@code direct_post} is answered with, when not the filter's own: a transaction's gets a bare acknowledgement,
+     * anything else the same-device handoff if configured.
+     */
+    private Optional<AuthenticationSuccessHandler> successHandler() {
+        Optional<AuthenticationSuccessHandler> sameDevice = Optional.ofNullable(transactionResultRepository)
+                .map(results -> new Oid4vpSameDeviceAuthenticationSuccessHandler(results, sameDeviceResultBaseUri));
+        if (transactions == null) return sameDevice;
+        return Optional.of((request, response, authentication) -> {
+            if (sameDevice.isEmpty() || transactions.isAnswer(authentication)) acknowledge(response);
+            else sameDevice.get().onAuthenticationSuccess(request, response, authentication);
+        });
+    }
+
+    private static void acknowledge(HttpServletResponse response) throws java.io.IOException {
+        response.setStatus(HttpServletResponse.SC_OK);
+        response.setContentType("application/json");
+        response.getWriter().write("{}");
     }
 
     public static <H extends HttpSecurityBuilder<H>> Oid4vpLoginConfigurer<H> oid4vpLogin() {

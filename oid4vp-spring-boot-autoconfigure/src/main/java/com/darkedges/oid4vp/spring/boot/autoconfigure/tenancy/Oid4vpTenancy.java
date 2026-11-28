@@ -20,6 +20,7 @@ import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegis
 import com.darkedges.oid4vp.spring.security.registration.Oid4vpRelyingPartyRegistrationRepository;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpDcApiOriginPolicy;
 import com.darkedges.oid4vp.spring.security.web.Oid4vpTenantResolver;
+import com.darkedges.oid4vp.verifier.request.RequestObjectSigner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nimbusds.jose.util.Base64URL;
@@ -96,12 +97,25 @@ public final class Oid4vpTenancy {
                 .orElse(Oid4vpRegistrationKey.DEFAULT_TENANT);
     }
 
-    private String tenantKey(String tenantId) {
+    /** The key a tenant's registrations, requests and transactions are kept under. */
+    public String tenantKey(String tenantId) {
         return tenantId.equals(defaultTenantId) ? Oid4vpRegistrationKey.DEFAULT_TENANT : tenantId;
     }
 
     private boolean isDefault(String key) {
         return Oid4vpRegistrationKey.DEFAULT_TENANT.equals(Oid4vpRegistrationKey.tenantOf(key));
+    }
+
+    /** The request parameters a tenant lets its backend add to this registration's transactions; none unless listed. */
+    public Set<String> requestParameters(Tenant tenant, String registrationId) {
+        if (tenant.id().equals(defaultTenantId)) return Set.of(); // the application's own registrations list none
+        TenantVerifierSettings.Registration spec = built(tenant).settings().registrations().get(registrationId);
+        return spec == null ? Set.of() : spec.requestParameters();
+    }
+
+    /** The key a registration of this request's tenant is known by. */
+    public String registrationKey(String tenantId, String registrationId) {
+        return Oid4vpRegistrationKey.of(tenantKey(tenantId), registrationId);
     }
 
     /** The application's registrations for the default tenant; each other tenant's from its settings, on the URL it was reached on. */
@@ -199,11 +213,14 @@ public final class Oid4vpTenancy {
          * One relying party:
          * <pre>
          * "registrations": { "login": { "dcqlQuery": {...}, "responseMode": "direct_post", "clientMetadata": {...},
-         *                               "walletAuthorizationEndpoint": "openid4vp://", "requestUriMethod": "get" } }
+         *                               "walletAuthorizationEndpoint": "openid4vp://", "requestUriMethod": "get",
+         *                               "requestParameters": ["not_before"] } }
          * </pre>
+         * {@code requestParameters} names what the tenant's backend may add to a transaction's request object.
          */
         public record Registration(DcqlQuery dcqlQuery, ResponseMode responseMode, Optional<ClientMetadata> clientMetadata,
-                                   Optional<URI> walletAuthorizationEndpoint, RequestUriMethod requestUriMethod) {}
+                                   Optional<URI> walletAuthorizationEndpoint, RequestUriMethod requestUriMethod,
+                                   Set<String> requestParameters) {}
 
         public static TenantVerifierSettings read(JsonNode settings) {
             Map<String, Registration> registrations = new java.util.LinkedHashMap<>();
@@ -229,7 +246,7 @@ public final class Oid4vpTenancy {
                     throw new IllegalArgumentException("registration \"" + id + "\": walletAuthorizationEndpoint is not a URI (such as openid4vp://authorize)");
                 }
                 RequestUriMethod method = RequestUriMethod.parse(spec.path("requestUriMethod").asText("get"));
-                registrations.put(id, new Registration(dcql, mode, metadata, wallet, method));
+                registrations.put(id, new Registration(dcql, mode, metadata, wallet, method, requestParameterNames(id, spec)));
             });
             List<TrustListIssuerKeyResolver.TrustedIssuer> trusted = TrustListIssuerKeyResolver.read(settings.path("trustedIssuers"));
             Set<String> origins = new java.util.LinkedHashSet<>();
@@ -241,6 +258,23 @@ public final class Oid4vpTenancy {
                 origins.add(origin.asText());
             }
             return new TenantVerifierSettings(Map.copyOf(registrations), trusted, Set.copyOf(origins));
+        }
+
+        private static Set<String> requestParameterNames(String id, JsonNode spec) {
+            JsonNode listed = spec.path("requestParameters");
+            if (listed.isMissingNode() || listed.isNull()) return Set.of();
+            if (!listed.isArray()) throw new IllegalArgumentException("registration \"" + id + "\": requestParameters is a list of names");
+            Set<String> names = new java.util.LinkedHashSet<>();
+            for (JsonNode entry : listed) {
+                String name = entry.asText();
+                // expires_at is the verifier's to set, from the transaction's lifetime.
+                if (!entry.isTextual() || !name.matches("[a-z][a-z0-9_]{0,63}") || name.equals("expires_at")
+                        || RequestObjectSigner.isReserved(name)) {
+                    throw new IllegalArgumentException("registration \"" + id + "\": \"" + name + "\" can't be a request parameter");
+                }
+                names.add(name);
+            }
+            return Set.copyOf(names);
         }
 
         /** What's wrong with these settings, if anything: the console's admin API refuses to save them. */
