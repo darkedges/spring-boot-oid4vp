@@ -19,6 +19,7 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.security.core.authority.AuthorityUtils;
 
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransaction;
 import java.net.URI;
 import java.security.SecureRandom;
 import java.time.Clock;
@@ -131,6 +132,70 @@ class JdbcVerifierStoresTest {
         assertThat(back.getPrincipal().claim("employee", "given_name").orElseThrow().asText()).isEqualTo("Jane");
         assertThat(back.isAuthenticated()).isTrue();
         assertThat(results.consume("bank/tx-1", "code-1")).isEmpty();
+    }
+
+    private static Oid4vpTransaction transaction() {
+        return new Oid4vpTransaction("tx-id", "request-id", "bank/staff", Optional.of("hire-1"), Map.of("not_before", "now"),
+                Instant.now().plusSeconds(60).truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
+    }
+
+    private static Oid4vpPrincipal jane() {
+        return new Oid4vpPrincipal(Map.of("staff", List.of(new VerifiedPresentation("staff", CredentialFormat.DC_SD_JWT,
+                MAPPER.createObjectNode().put("given_name", "Jane"), Optional.of(MAPPER.createObjectNode().put("kty", "EC"))))));
+    }
+
+    @Test
+    void aTransactionRoundTripsForItsTenantOnly() {
+        var store = new JdbcVerifierStores.Transactions(table, Clock.systemUTC());
+        Oid4vpTransaction saved = transaction();
+        store.save(saved);
+
+        assertThat(store.find("bank", "tx-id")).contains(saved);
+        assertThat(store.findByRequestId("bank", "request-id")).contains(saved);
+        assertThat(store.find("shop", "tx-id")).isEmpty();
+        assertThat(store.findByRequestId("shop", "request-id")).isEmpty();
+        assertThat(store.find("bank", "request-id")).isEmpty();
+        String dump = jdbc.sql("SELECT string_agg(kind || key || owner || encode(payload, 'escape'), '') FROM oid4vp_verifier_entry")
+                .query(String.class).single();
+        assertThat(dump).doesNotContain("tx-id").doesNotContain("request-id").doesNotContain("hire-1");
+    }
+
+    @Test
+    void aTransactionIsAnsweredOnceAndItsResultCollectedOnceAcrossInstances() throws Exception {
+        var store = new JdbcVerifierStores.Transactions(table, Clock.systemUTC());
+        Oid4vpTransaction saved = transaction();
+        store.save(saved);
+        assertThat(store.answerOf(saved)).isEmpty();
+        Instant until = Instant.now().plusSeconds(60);
+
+        assertThat(store.answer(saved, jane(), until)).isTrue();
+        assertThat(store.answer(saved, jane(), until.plusSeconds(60))).isFalse();
+        assertThat(store.answerOf(saved)).contains(new com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactionStore.Answer(false, until));
+        assertThat(jdbc.sql("SELECT string_agg(encode(payload, 'escape'), '') FROM oid4vp_verifier_entry").query(String.class).single())
+                .doesNotContain("Jane");
+
+        var pool = Executors.newFixedThreadPool(8);
+        List<Future<Optional<Oid4vpPrincipal>>> attempts = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            attempts.add(pool.submit(() -> new JdbcVerifierStores.Transactions(new VerifierEntryTable(jdbc, key), Clock.systemUTC()).collect(saved)));
+        }
+        List<Oid4vpPrincipal> collected = new ArrayList<>();
+        for (Future<Optional<Oid4vpPrincipal>> attempt : attempts) attempt.get().ifPresent(collected::add);
+        pool.shutdown();
+        assertThat(collected).hasSize(1);
+        assertThat(collected.getFirst().claim("staff", "given_name").orElseThrow().asText()).isEqualTo("Jane");
+        assertThat(collected.getFirst().presentations().get("staff").getFirst().holderKeyConfirmed()).isPresent();
+        assertThat(store.answerOf(saved).orElseThrow().resultCollected()).isTrue();
+        assertThat(store.answer(saved, jane(), until)).isFalse();
+    }
+
+    @Test
+    void aResultThatWaitedTooLongIsNotCollected() {
+        var store = new JdbcVerifierStores.Transactions(table, Clock.systemUTC());
+        Oid4vpTransaction saved = transaction();
+        store.save(saved);
+        store.answer(saved, jane(), Instant.now().minusSeconds(1));
+        assertThat(store.collect(saved)).isEmpty();
     }
 
     @Test

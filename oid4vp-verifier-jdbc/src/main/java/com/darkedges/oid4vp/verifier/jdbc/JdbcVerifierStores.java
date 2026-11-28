@@ -18,6 +18,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransaction;
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactionStore;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Clock;
@@ -39,6 +41,9 @@ public final class JdbcVerifierStores {
     public static final String REQUEST_CONTEXT = "request_context";
     public static final String EPHEMERAL_KEY = "ephemeral_key";
     public static final String TRANSACTION_RESULT = "transaction_result";
+    public static final String TRANSACTION = "transaction";
+    public static final String TRANSACTION_REQUEST = "transaction_request";
+    public static final String TRANSACTION_ANSWER = "transaction_answer";
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private JdbcVerifierStores() {}
@@ -150,33 +155,127 @@ public final class JdbcVerifierStores {
         static ObjectNode write(Oid4vpAuthenticationToken token) {
             ObjectNode node = MAPPER.createObjectNode().put("registrationKey", token.registrationKey());
             token.transactionId().ifPresent(t -> node.put("transactionId", t));
-            ObjectNode presentations = node.putObject("presentations");
-            token.getPrincipal().presentations().forEach((queryId, list) -> {
-                ArrayNode array = presentations.putArray(queryId);
-                for (VerifiedPresentation p : list) {
-                    ObjectNode entry = array.addObject().put("credentialQueryId", p.credentialQueryId()).put("format", p.format().identifier());
-                    entry.set("verifiedClaims", p.verifiedClaims());
-                    p.holderKeyConfirmed().ifPresent(k -> entry.set("holderKeyConfirmed", k));
-                }
-            });
+            node.set("presentations", writePresentations(token.getPrincipal()));
             return node;
         }
 
         static Oid4vpAuthenticationToken read(JsonNode n) {
-            Map<String, List<VerifiedPresentation>> presentations = new LinkedHashMap<>();
-            n.path("presentations").fields().forEachRemaining(e -> {
-                List<VerifiedPresentation> list = new ArrayList<>();
-                for (JsonNode p : e.getValue()) {
-                    list.add(new VerifiedPresentation(p.path("credentialQueryId").asText(), CredentialFormat.fromIdentifier(p.path("format").asText()),
-                            p.path("verifiedClaims"), p.hasNonNull("holderKeyConfirmed") ? Optional.of(p.get("holderKeyConfirmed")) : Optional.empty()));
-                }
-                presentations.put(e.getKey(), list);
-            });
-            Oid4vpAuthenticationToken token = new Oid4vpAuthenticationToken(new Oid4vpPrincipal(presentations),
+            Oid4vpAuthenticationToken token = new Oid4vpAuthenticationToken(principal(n.path("presentations")),
                     AuthorityUtils.NO_AUTHORITIES, n.hasNonNull("transactionId") ? n.get("transactionId").asText() : null);
             token.setRegistrationKey(n.path("registrationKey").asText());
             return token;
         }
+    }
+
+    /**
+     * Backend transactions. The transaction and its request id are kept an hour past expiry, so its status can still be told. An answer
+     * is added once (the first presentation wins) under the tenant; collecting it hands it to one caller and drops the claims.
+     */
+    public static final class Transactions implements Oid4vpTransactionStore {
+        private static final Duration RETENTION = Duration.ofHours(1);
+        private static final String COLLECTED = "|collected";
+        private final VerifierEntryTable table;
+        private final Clock clock;
+
+        public Transactions(VerifierEntryTable table, Clock clock) {
+            this.table = table;
+            this.clock = clock;
+        }
+
+        @Override
+        public void save(Oid4vpTransaction t) {
+            ObjectNode node = MAPPER.createObjectNode().put("transactionId", t.transactionId()).put("requestId", t.requestId())
+                    .put("registrationKey", t.registrationKey()).put("expiresAt", t.expiresAt().toString());
+            t.reference().ifPresent(r -> node.put("reference", r));
+            ObjectNode parameters = node.putObject("requestParameters");
+            t.requestParameters().forEach(parameters::put);
+            Instant keepUntil = t.expiresAt().plus(RETENTION);
+            table.put(TRANSACTION, t.transactionId(), t.tenantId(), bytes(node), keepUntil);
+            table.put(TRANSACTION_REQUEST, t.requestId(), t.tenantId(),
+                    bytes(MAPPER.createObjectNode().put("transactionId", t.transactionId())), keepUntil);
+        }
+
+        @Override
+        public Optional<Oid4vpTransaction> find(String tenantId, String transactionId) {
+            if (transactionId == null) return Optional.empty();
+            return table.find(TRANSACTION, transactionId, tenantId).map(entry -> {
+                JsonNode n = json(entry.payload());
+                Map<String, String> parameters = new LinkedHashMap<>();
+                n.path("requestParameters").fields().forEachRemaining(f -> parameters.put(f.getKey(), f.getValue().asText()));
+                return new Oid4vpTransaction(n.path("transactionId").asText(), n.path("requestId").asText(),
+                        n.path("registrationKey").asText(), text(n, "reference"), parameters, Instant.parse(n.path("expiresAt").asText()));
+            });
+        }
+
+        @Override
+        public Optional<Oid4vpTransaction> findByRequestId(String tenantId, String requestId) {
+            if (requestId == null) return Optional.empty();
+            return table.find(TRANSACTION_REQUEST, requestId, tenantId)
+                    .flatMap(entry -> find(tenantId, json(entry.payload()).path("transactionId").asText()));
+        }
+
+        @Override
+        public boolean answer(Oid4vpTransaction t, Oid4vpPrincipal result, Instant resultExpiresAt) {
+            ObjectNode node = MAPPER.createObjectNode().put("resultExpiresAt", resultExpiresAt.toString());
+            node.set("presentations", writePresentations(result));
+            Instant keepUntil = t.expiresAt().isAfter(resultExpiresAt) ? t.expiresAt() : resultExpiresAt;
+            return table.putIfAbsent(TRANSACTION_ANSWER, t.transactionId(), t.tenantId(), bytes(node), keepUntil.plus(RETENTION));
+        }
+
+        @Override
+        public Optional<Answer> answerOf(Oid4vpTransaction t) {
+            Optional<VerifierEntryTable.Entry> waiting = table.find(TRANSACTION_ANSWER, t.transactionId(), t.tenantId());
+            if (waiting.isPresent()) return waiting.map(e -> new Answer(false, resultExpiry(json(e.payload()))));
+            return table.find(TRANSACTION_ANSWER, t.transactionId(), t.tenantId() + COLLECTED)
+                    .map(e -> new Answer(true, resultExpiry(json(e.payload()))));
+        }
+
+        @Override
+        public Optional<Oid4vpPrincipal> collect(Oid4vpTransaction t) {
+            String waiting = t.tenantId();
+            String collected = waiting + COLLECTED;
+            Optional<JsonNode> answer = table.find(TRANSACTION_ANSWER, t.transactionId(), waiting).map(e -> json(e.payload()));
+            if (answer.isEmpty() || !resultExpiry(answer.get()).isAfter(clock.instant())
+                    || !table.changeOwner(TRANSACTION_ANSWER, t.transactionId(), waiting, collected)) {
+                return Optional.empty();
+            }
+            // Handed out: only the fact of the answer is kept.
+            Instant resultExpiresAt = resultExpiry(answer.get());
+            table.put(TRANSACTION_ANSWER, t.transactionId(), collected,
+                    bytes(MAPPER.createObjectNode().put("resultExpiresAt", resultExpiresAt.toString())),
+                    (t.expiresAt().isAfter(resultExpiresAt) ? t.expiresAt() : resultExpiresAt).plus(RETENTION));
+            return Optional.of(principal(answer.get().path("presentations")));
+        }
+
+        private static Instant resultExpiry(JsonNode answer) {
+            return Instant.parse(answer.path("resultExpiresAt").asText());
+        }
+    }
+
+    private static ObjectNode writePresentations(Oid4vpPrincipal principal) {
+        ObjectNode presentations = MAPPER.createObjectNode();
+        principal.presentations().forEach((queryId, list) -> {
+            ArrayNode array = presentations.putArray(queryId);
+            for (VerifiedPresentation p : list) {
+                ObjectNode entry = array.addObject().put("credentialQueryId", p.credentialQueryId()).put("format", p.format().identifier());
+                entry.set("verifiedClaims", p.verifiedClaims());
+                p.holderKeyConfirmed().ifPresent(k -> entry.set("holderKeyConfirmed", k));
+            }
+        });
+        return presentations;
+    }
+
+    private static Oid4vpPrincipal principal(JsonNode stored) {
+        Map<String, List<VerifiedPresentation>> presentations = new LinkedHashMap<>();
+        stored.fields().forEachRemaining(e -> {
+            List<VerifiedPresentation> list = new ArrayList<>();
+            for (JsonNode p : e.getValue()) {
+                list.add(new VerifiedPresentation(p.path("credentialQueryId").asText(), CredentialFormat.fromIdentifier(p.path("format").asText()),
+                        p.path("verifiedClaims"), p.hasNonNull("holderKeyConfirmed") ? Optional.of(p.get("holderKeyConfirmed")) : Optional.empty()));
+            }
+            presentations.put(e.getKey(), list);
+        });
+        return new Oid4vpPrincipal(presentations);
     }
 
     private static Optional<String> text(JsonNode node, String field) {

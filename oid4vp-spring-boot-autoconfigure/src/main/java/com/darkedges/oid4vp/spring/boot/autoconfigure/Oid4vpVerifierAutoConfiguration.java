@@ -31,6 +31,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 
+import com.darkedges.oid4vp.spring.security.transaction.InMemoryOid4vpTransactionStore;
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactionStore;
 import java.net.URI;
 import java.time.Clock;
 import java.util.List;
@@ -91,6 +93,12 @@ public class Oid4vpVerifierAutoConfiguration {
     @ConditionalOnMissingBean
     public Oid4vpEphemeralEncryptionKeyRepository oid4vpEphemeralEncryptionKeyRepository() {
         return new InMemoryOid4vpEphemeralEncryptionKeyRepository();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Oid4vpTransactionStore oid4vpTransactionStore() {
+        return new InMemoryOid4vpTransactionStore();
     }
 
     @Bean

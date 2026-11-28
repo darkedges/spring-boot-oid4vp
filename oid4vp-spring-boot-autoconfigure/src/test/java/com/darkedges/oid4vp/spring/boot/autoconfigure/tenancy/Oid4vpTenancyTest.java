@@ -166,6 +166,17 @@ class Oid4vpTenancyTest {
     }
 
     @Test
+    void aRegistrationCanOnlyListRequestParametersOfItsOwn() throws Exception {
+        String registration = "{\"registrations\":{\"x\":{\"dcqlQuery\":{\"credentials\":[{\"id\":\"c\",\"format\":\"dc+sd-jwt\","
+                + "\"meta\":{\"vct_values\":[\"https://vct.example/c\"]}}]},\"requestParameters\":%s}}}";
+        assertThat(Oid4vpTenancy.TenantVerifierSettings.read(MAPPER.readTree(registration.formatted("[\"not_before\"]")))
+                .registrations().get("x").requestParameters()).containsExactly("not_before");
+        for (String refused : new String[] {"[\"nonce\"]", "[\"response_uri\"]", "[\"exp\"]", "[\"expires_at\"]", "[\"Has Space\"]", "[7]", "\"not_before\""}) {
+            assertThat(Oid4vpTenancy.TenantVerifierSettings.problems(MAPPER.readTree(registration.formatted(refused)))).as(refused).isNotEmpty();
+        }
+    }
+
+    @Test
     void theAutoConfigurationProvidesTheTenancyAndValidatesVerifierSettings() {
         new WebApplicationContextRunner()
                 .withConfiguration(AutoConfigurations.of(Oid4vpVerifierTenancyAutoConfiguration.class, TenancyAutoConfiguration.class))

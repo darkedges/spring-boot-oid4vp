@@ -18,6 +18,7 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -64,13 +65,24 @@ public final class Oid4vpAuthorizationRequestService {
         this.requestTtl = requestTtl;
     }
 
+    /** The relying party registration a request would be built for. */
+    public Optional<Oid4vpRelyingPartyRegistration> registration(String registrationId) {
+        return registrations.findByRegistrationId(registrationId);
+    }
+
     public Oid4vpAuthorizationRequestResolution resolve(String registrationId) {
+        return resolve(registrationId, randomUrlSafeToken(), clock.instant().plus(requestTtl));
+    }
+
+    /**
+     * As {@link #resolve(String)}, for a transaction the caller keeps: its id, and until when this request may be answered.
+     */
+    public Oid4vpAuthorizationRequestResolution resolve(String registrationId, String transactionId, Instant expiresAt) {
         Oid4vpRelyingPartyRegistration registration = registrations.findByRegistrationId(registrationId)
                 .orElseThrow(() -> new IllegalArgumentException("unknown relying party registration: " + registrationId));
 
         String nonce = randomUrlSafeToken();
         String state = randomUrlSafeToken();
-        String transactionId = randomUrlSafeToken();
         DcqlQuery dcqlQuery = registration.dcqlQuery().get();
         Optional<CodeFlowConfig> codeFlow = registration.codeFlow();
 
@@ -107,7 +119,7 @@ public final class Oid4vpAuthorizationRequestService {
                     Optional.empty(),
                     Optional.of(state),
                     nonce,
-                    clientMetadataFor(registration, registrationId),
+                    clientMetadataFor(registration, registrationId, expiresAt),
                     registration.requestUriMethod(),
                     List.of(),
                     registration.verifierInfo(),
@@ -117,7 +129,7 @@ public final class Oid4vpAuthorizationRequestService {
 
         requestRepository.save(new Oid4vpAuthorizationRequestContext(
                 registrationId, state, nonce, registration.clientId(), dcqlQuery, registration.responseUri(),
-                clock.instant().plus(requestTtl), Optional.of(transactionId), codeVerifier));
+                expiresAt, Optional.of(transactionId), codeVerifier));
 
         return new Oid4vpAuthorizationRequestResolution(request, transactionId);
     }
@@ -129,7 +141,8 @@ public final class Oid4vpAuthorizationRequestService {
      * same response-encryption key across Authorization Requests. Every other response mode returns the
      * registration's static {@code client_metadata} unchanged.
      */
-    private Optional<ClientMetadata> clientMetadataFor(Oid4vpRelyingPartyRegistration registration, String registrationId) {
+    private Optional<ClientMetadata> clientMetadataFor(Oid4vpRelyingPartyRegistration registration, String registrationId,
+                                                       Instant expiresAt) {
         ResponseMode responseMode = registration.responseMode();
         if (responseMode != ResponseMode.DIRECT_POST_JWT && responseMode != ResponseMode.DC_API_JWT) {
             return registration.clientMetadata();
@@ -141,7 +154,7 @@ public final class Oid4vpAuthorizationRequestService {
                                 + " but has no client-metadata configured (needed for vp_formats_supported etc.)"));
 
         EphemeralEncryptionKeyPair keyPair = EphemeralEncryptionKeyGenerator.generate();
-        ephemeralEncryptionKeyRepository.save(registrationId, keyPair.privateJwk(), clock.instant().plus(requestTtl));
+        ephemeralEncryptionKeyRepository.save(registrationId, keyPair.privateJwk(), expiresAt);
 
         ObjectNode jwks = MAPPER.createObjectNode();
         jwks.putArray("keys").add(keyPair.publicJwk());
