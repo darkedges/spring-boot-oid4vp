@@ -1,6 +1,5 @@
 package com.darkedges.oid4vp.demo.verifier;
 
-import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.TrustListIssuerKeyResolver;
 import org.springframework.beans.factory.ObjectProvider;
 import com.darkedges.oid4vp.verifier.jdbc.VerifierEntryTable;
 import com.darkedges.oid4vp.verifier.jdbc.JdbcVerifierStores;
@@ -11,6 +10,7 @@ import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.Oid4vpTenancy;
 import com.darkedges.oid4vp.core.request.RequestObjectSigningKeyResolver;
 import com.darkedges.oid4vp.core.request.TokenEndpointClient;
 import com.darkedges.oid4vp.core.response.IssuerKeyResolver;
+import com.darkedges.oid4vp.spring.boot.autoconfigure.tenancy.TrustListIssuerKeyResolver;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
 import com.darkedges.oid4vp.core.response.ResponseDecryptionKeyResolver;
 import com.darkedges.oid4vp.spring.security.config.Oid4vpLoginConfigurer;
