@@ -68,6 +68,30 @@ public final class VerifierEntryTable {
         if (writes.incrementAndGet() % SWEEP_EVERY == 0) sweep();
     }
 
+    /** Adds the entry unless one with this key exists; whether it was added. */
+    public boolean putIfAbsent(String kind, String key, String owner, byte[] payload, Instant expiresAt) {
+        String hashedKey = hash(key);
+        return jdbc.sql("""
+                INSERT INTO oid4vp_verifier_entry (kind, key, owner, payload, expires_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (kind, key) DO NOTHING
+                """).params(kind, hashedKey, hash(owner), encrypt(payload, kind, hashedKey), Timestamp.from(expiresAt)).update() == 1;
+    }
+
+    /** The entry if {@code owner} is its owner, leaving it. */
+    public Optional<Entry> find(String kind, String key, String owner) {
+        String hashedKey = hash(key);
+        return jdbc.sql("SELECT payload, expires_at FROM oid4vp_verifier_entry WHERE kind = ? AND key = ? AND owner = ?")
+                .params(kind, hashedKey, hash(owner))
+                .query((rs, row) -> new Entry(decrypt(rs.getBytes("payload"), kind, hashedKey), rs.getTimestamp("expires_at").toInstant()))
+                .optional();
+    }
+
+    /** Moves the entry from {@code owner} to {@code newOwner}, in one statement: of several callers, one succeeds. */
+    public boolean changeOwner(String kind, String key, String owner, String newOwner) {
+        return jdbc.sql("UPDATE oid4vp_verifier_entry SET owner = ? WHERE kind = ? AND key = ? AND owner = ?")
+                .params(hash(newOwner), kind, hash(key), hash(owner)).update() == 1;
+    }
+
     /** Removes and returns the entry if {@code owner} is its owner; otherwise leaves it. */
     public Optional<Entry> take(String kind, String key, String owner) {
         String hashedKey = hash(key);

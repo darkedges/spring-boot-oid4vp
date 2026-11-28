@@ -14,7 +14,9 @@ import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
 
 import java.text.ParseException;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * Signs an {@link AuthorizationRequest} as a JWT-Secured Authorization Request (JAR, RFC9101) per
@@ -40,11 +42,40 @@ public final class RequestObjectSigner {
     public static final String TYPE = "oauth-authz-req+jwt";
     private static final String STATIC_DISCOVERY_AUDIENCE = "https://self-issued.me/v2";
 
+    /** Parameters an application can't add: the protocol's own, which come from the {@link AuthorizationRequest}, and JWT claims. */
+    private static final Set<String> RESERVED = Set.of(
+            "response_type", "client_id", "client_id_scheme", "response_mode", "response_uri", "redirect_uri", "dcql_query",
+            "presentation_definition", "presentation_definition_uri", "scope", "state", "nonce", "client_metadata",
+            "client_metadata_uri", "request", "request_uri", "request_uri_method", "transaction_data", "verifier_info",
+            "verifier_attestations", "code_challenge", "code_challenge_method", "wallet_nonce", "expected_origins",
+            "iss", "sub", "aud", "exp", "iat", "nbf", "jti");
+
     private RequestObjectSigner() {}
+
+    /** Whether {@code name} is a parameter an application may not add to a request object. */
+    public static boolean isReserved(String name) {
+        return RESERVED.contains(name);
+    }
 
     public static SignedJWT sign(
             AuthorizationRequest request, JsonNode signingJwk, JWSAlgorithm alg, Optional<String> walletNonce) {
+        return sign(request, signingJwk, alg, walletNonce, Map.of());
+    }
+
+    /**
+     * As {@link #sign(AuthorizationRequest, JsonNode, JWSAlgorithm, Optional)}, with the application's own parameters as further string
+     * claims.
+     *
+     * @throws IllegalArgumentException for a {@linkplain #isReserved reserved} name
+     */
+    public static SignedJWT sign(
+            AuthorizationRequest request, JsonNode signingJwk, JWSAlgorithm alg, Optional<String> walletNonce,
+            Map<String, String> parameters) {
         ObjectNode claims = AuthorizationRequestWriter.write(request);
+        parameters.forEach((name, value) -> {
+            if (isReserved(name)) throw new IllegalArgumentException("not a parameter an application can add: " + name);
+            claims.put(name, value);
+        });
         claims.put("aud", STATIC_DISCOVERY_AUDIENCE);
         walletNonce.ifPresent(nonce -> claims.put("wallet_nonce", nonce));
 

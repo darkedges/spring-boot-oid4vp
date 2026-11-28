@@ -15,6 +15,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 
 import javax.sql.DataSource;
+import com.darkedges.oid4vp.spring.security.transaction.Oid4vpTransactionStore;
 import java.time.Clock;
 import java.time.Duration;
 
@@ -72,6 +73,12 @@ public class Oid4vpVerifierJdbcAutoConfiguration {
     @ConditionalOnMissingBean
     public Oid4vpEphemeralEncryptionKeyRepository oid4vpEphemeralEncryptionKeyRepository(VerifierEntryTable table) {
         return new JdbcVerifierStores.EphemeralEncryptionKeys(table);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public Oid4vpTransactionStore oid4vpTransactionStore(VerifierEntryTable table) {
+        return new JdbcVerifierStores.Transactions(table, Clock.systemUTC());
     }
 
     @Bean
