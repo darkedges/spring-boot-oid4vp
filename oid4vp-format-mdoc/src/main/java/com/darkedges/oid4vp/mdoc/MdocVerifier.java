@@ -4,6 +4,7 @@ import co.nstant.in.cbor.model.Array;
 import co.nstant.in.cbor.model.DataItem;
 import co.nstant.in.cbor.model.Map;
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
+import com.darkedges.oid4vp.core.dcql.MsoMdocMeta;
 import com.darkedges.oid4vp.core.response.PresentationEntry;
 import com.darkedges.oid4vp.core.response.PresentationVerificationParams;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
@@ -72,6 +73,10 @@ public final class MdocVerifier implements PresentationVerifier {
         if (!mso.docType().equals(docType)) {
             throw new MdocVerificationException(
                     "MSO docType \"" + mso.docType() + "\" does not match Document docType \"" + docType + "\"");
+        }
+        // The credential must be of the type the query asked for: a trusted issuer's other documents don't answer it.
+        if (params.query().meta() instanceof MsoMdocMeta meta && !meta.doctypeValue().equals(docType)) {
+            throw new MdocVerificationException("docType \"" + docType + "\" is not the one the Credential Query asked for");
         }
         checkValidity(mso, params);
 

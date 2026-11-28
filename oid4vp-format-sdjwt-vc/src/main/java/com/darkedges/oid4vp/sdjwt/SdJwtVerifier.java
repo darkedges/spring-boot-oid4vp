@@ -1,6 +1,7 @@
 package com.darkedges.oid4vp.sdjwt;
 
 import com.darkedges.oid4vp.core.dcql.CredentialFormat;
+import com.darkedges.oid4vp.core.dcql.SdJwtVcMeta;
 import com.darkedges.oid4vp.core.response.PresentationEntry;
 import com.darkedges.oid4vp.core.response.PresentationVerificationParams;
 import com.darkedges.oid4vp.core.response.PresentationVerifier;
@@ -20,7 +21,8 @@ import java.util.Optional;
 
 /**
  * The top-level {@code dc+sd-jwt} presentation verifier: parses an SD-JWT(+KB) presentation string,
- * verifies the Issuer's signature, checks validity times, digest-verifies the disclosed claims, and (if
+ * verifies the Issuer's signature, checks validity times, digest-verifies the disclosed claims, checks the
+ * credential is of a queried {@code vct}, and (if
  * required by the Credential Query) verifies the Key Binding JWT's binding to this transaction.
  */
 public final class SdJwtVerifier implements PresentationVerifier {
@@ -46,6 +48,7 @@ public final class SdJwtVerifier implements PresentationVerifier {
         checkValidityTimes(rawPayload, params);
 
         JsonNode verifiedClaims = SdJwtDigestVerifier.verify(rawPayload, sdJwt.disclosures());
+        checkType(verifiedClaims, params);
 
         Optional<JsonNode> holderKeyConfirmed = Optional.empty();
         if (params.query().requireCryptographicHolderBinding()) {
@@ -97,6 +100,16 @@ public final class SdJwtVerifier implements PresentationVerifier {
             Instant nbf = Instant.ofEpochSecond(rawPayload.get("nbf").asLong());
             if (now.isBefore(nbf)) {
                 throw new SdJwtVerificationException("SD-JWT is not yet valid: nbf=" + nbf + ", now=" + now);
+            }
+        }
+    }
+
+    /** The credential must be of a type the query asked for: a trusted issuer's other credentials don't answer it. */
+    private static void checkType(JsonNode verifiedClaims, PresentationVerificationParams params) {
+        if (params.query().meta() instanceof SdJwtVcMeta meta) {
+            JsonNode vct = verifiedClaims.path("vct");
+            if (!vct.isTextual() || !meta.vctValues().contains(vct.asText())) {
+                throw new SdJwtVerificationException("SD-JWT VC \"vct\" is not one of the types the Credential Query asked for");
             }
         }
     }

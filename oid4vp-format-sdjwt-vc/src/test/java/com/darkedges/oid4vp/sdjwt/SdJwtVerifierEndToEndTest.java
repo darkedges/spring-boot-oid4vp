@@ -90,6 +90,26 @@ class SdJwtVerifierEndToEndTest {
                 .isInstanceOf(com.darkedges.oid4vp.core.response.NonceMismatchException.class);
     }
 
+    @Test
+    void rejectsACredentialOfATypeTheQueryDidNotAskFor() {
+        String presentation = FixtureLoader.readExampleCompact("sd_jwt_vcld/01/sd_jwt_presentation.txt");
+        CredentialQuery query = CredentialQuery.builder("my_credential", CredentialFormat.DC_SD_JWT)
+                .meta(new SdJwtVcMeta(List.of("https://credentials.example.com/another_credential")))
+                .build();
+        JsonNode issuerPublicJwk = jsonOrThrow();
+        IssuerKeyResolver issuerKeyResolver = (issuer, keyId, certificateChain) -> Optional.of(issuerPublicJwk);
+        Clock clock = Clock.fixed(Instant.ofEpochSecond(1744743394L), ZoneOffset.UTC);
+
+        PresentationVerificationParams params = new PresentationVerificationParams(
+                query, SdJwtVcldFixture.keyBindingNonce(), SdJwtVcldFixture.verifierIdentifier(), SdJwtVcldFixture.verifierIdentifier(),
+                "https://verifier.example.org/response", Optional.empty(), issuerKeyResolver, clock);
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(
+                        () -> new SdJwtVerifier().verify(new PresentationEntry.StringPresentation(presentation), params))
+                .isInstanceOf(SdJwtVerificationException.class)
+                .hasMessageContaining("vct");
+    }
+
     private static JsonNode jsonOrThrow() {
         try {
             return MAPPER.readTree(SdJwtVcldFixture.issuerKey().toPublicJWK().toJSONString());
